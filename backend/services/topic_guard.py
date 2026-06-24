@@ -1,26 +1,22 @@
 from __future__ import annotations
 """
-敏感话题拦截中间件 v0.2
+敏感话题处理模块 v0.3
 
-两层拦截架构：
-  第一层：安全关键词精确拦截（转账/借钱等金融欺诈词，零漏报）
-  第二层：LLM 语义意图匹配（处理各种同义问法，一次调用同时完成匹配+生成回复）
+架构调整：
+  - 安全词（转账/借钱等）仍是硬拦截，直接返回，零漏报
+  - 用户预设话题从"拦截器"改为"提示生成器"：
+    命中后把预设信息作为 hint 注入 system prompt，由 LLM 决定最终回复
+    这样 LLM 可以结合对话情绪、上下文灵活应对，而不是死板照搬预设答案
 """
 import json
 import re
+from typing import Optional
 
-from backend.db.database import get_db, rows_to_list, row_to_dict
+from backend.db.database import get_db, rows_to_list
 from backend.utils.auth import new_id
 
 
-# 默认回避话题的兜底回复
-DEFLECT_REPLIES = [
-    "这个问题嘛，我得想想，下次再聊哈",
-    "这个…现在不方便说，你先别问啦",
-    "嗯，这个话题我们改天聊，好不好",
-]
-
-# 固定拦截的危险话题（无论是否预设，都拦截）—— 精确匹配，不走语义
+# 固定拦截的危险话题 —— 精确匹配，直接硬拦（金融欺诈/诈骗防护）
 ALWAYS_BLOCK_KEYWORDS = [
     "转账", "打款", "借钱", "借我", "汇款", "红包", "付款", "还钱",
     "账号密码", "银行卡", "验证码",
@@ -28,58 +24,87 @@ ALWAYS_BLOCK_KEYWORDS = [
 ALWAYS_BLOCK_REPLY = "这个我没办法帮你，你直接联系本人吧。"
 
 
-class TopicGuardResult:
-    def __init__(self, blocked: bool, reply: str = "", strategy: str = ""):
+class SafetyBlockResult:
+    """安全硬拦截结果"""
+    def __init__(self, blocked: bool, reply: str = ""):
         self.blocked = blocked
         self.reply = reply
-        self.strategy = strategy
 
 
-def check_message(avatar_id: str, user_message: str) -> TopicGuardResult:
+def is_safety_blocked(user_message: str) -> SafetyBlockResult:
     """
-    检测消息是否命中预设敏感话题或安全拦截词。
-
-    Returns:
-        TopicGuardResult(blocked=True, reply=...) 表示拦截
-        TopicGuardResult(blocked=False) 表示放行给 LLM
+    第一道防线：安全关键词精确匹配。
+    命中则立即硬拦，不走任何 LLM。
     """
-    # ── 第一层：安全词精确拦截（金融欺诈防护，必须零漏报）──
     for kw in ALWAYS_BLOCK_KEYWORDS:
         if kw in user_message:
-            return TopicGuardResult(
-                blocked=True,
-                reply=ALWAYS_BLOCK_REPLY,
-                strategy="safety_block",
-            )
+            return SafetyBlockResult(blocked=True, reply=ALWAYS_BLOCK_REPLY)
+    return SafetyBlockResult(blocked=False)
 
-    # ── 第二层：自定义预设话题语义匹配 ──
+
+def get_topic_hints(avatar_id: str, user_message: str) -> str:
+    """
+    检查消息是否命中预设话题，命中则返回提示字符串注入 system prompt。
+    不再直接返回答案，而是把预设信息交给 LLM 灵活处理。
+
+    Returns:
+        命中时返回提示字符串，未命中返回空字符串
+    """
     with get_db() as conn:
+        # 查全局（avatar_id IS NULL）+ 当前替身专属
         topics = rows_to_list(conn.execute(
-            "SELECT * FROM sensitive_topics WHERE avatar_id = ?", (avatar_id,)
+            """SELECT * FROM sensitive_topics
+               WHERE avatar_id = ? OR avatar_id IS NULL
+               ORDER BY avatar_id NULLS LAST""",
+            (avatar_id,),
         ).fetchall())
 
     if not topics:
-        return TopicGuardResult(blocked=False)
+        return ""
 
-    # 先尝试关键词快速匹配（命中则跳过 LLM，节省成本）
+    # 先关键词快速匹配
     for topic in topics:
         keywords = json.loads(topic.get("trigger_keywords", "[]"))
         if _matches_any(user_message, keywords):
-            return _build_result(topic, user_message, matched_by="keyword")
+            return _build_hint(topic)
 
-    # 关键词未命中，调用 LLM 做语义意图匹配
-    return _llm_intent_check(topics, user_message)
+    # 再 LLM 语义匹配
+    return _llm_semantic_hint(topics, user_message)
 
 
-def _llm_intent_check(topics: list[dict], user_message: str) -> TopicGuardResult:
-    """
-    用 LLM 判断消息是否语义上命中某条预设话题。
-    一次调用同时完成：意图匹配 + 生成语境化回复。
-    """
+def _build_hint(topic: dict) -> str:
+    """把命中的话题转成注入 system prompt 的提示字符串"""
+    strategy = topic.get("strategy", "deflect")
+    preset = topic.get("preset_content", "")
+    desc = topic.get("topic_description") or "、".join(
+        json.loads(topic.get("trigger_keywords", "[]"))
+    )
+
+    if strategy == "preset_answer" and preset:
+        return (
+            f"\n【预设信息参考】用户问到了「{desc}」相关的问题。"
+            f"关于这个问题，有一个参考答案：「{preset}」。"
+            "请结合当前对话语境和对方的情绪，自然地回应——"
+            "可以用预设答案作为事实基础，但要根据对方的实际问法和情绪状态灵活表达，"
+            "不要生硬照搬，更不要重复之前说过的完全相同的话。"
+        )
+    elif strategy == "deflect":
+        return (
+            f"\n【预设信息参考】用户问到了「{desc}」相关的问题，"
+            "这是你不太方便详细说的话题，请自然地转移话题或给一个模糊的回应。"
+        )
+    else:  # admit_unknown
+        return (
+            f"\n【预设信息参考】用户问到了「{desc}」相关的问题，"
+            "你对此不太了解，请诚实地说不太清楚，建议对方直接问本人。"
+        )
+
+
+def _llm_semantic_hint(topics: list[dict], user_message: str) -> str:
+    """LLM 语义匹配，返回提示字符串或空字符串"""
     try:
         from backend.services.llm_provider import llm
 
-        # 构建话题列表描述
         topics_desc = []
         for i, t in enumerate(topics):
             desc = t.get("topic_description") or "、".join(
@@ -89,76 +114,41 @@ def _llm_intent_check(topics: list[dict], user_message: str) -> TopicGuardResult
             strategy = t.get("strategy", "deflect")
             topics_desc.append(
                 f"话题{i+1}：{desc} | 策略：{strategy}"
-                + (f" | 预设答案：{preset}" if preset else "")
+                + (f" | 参考答案：{preset}" if preset else "")
             )
 
         topics_text = "\n".join(topics_desc)
-
-        prompt = f"""你是一个敏感话题识别助手。用户发了一条消息，请判断它是否语义上属于以下预设话题之一。
-
-预设话题列表：
-{topics_text}
-
-用户消息：「{user_message}」
-
-判断规则：
-- 语义相关即算命中，不要求措辞完全一致
-- 如果命中策略为"preset_answer"，根据预设答案内容，针对用户的具体问法生成一个自然口语化的回复（不要照抄预设，要根据问法调整表达）
-- 如果命中策略为"deflect"，生成一个自然的回避回复
-- 如果命中策略为"admit_unknown"，生成类似"这个我说不好，你直接问本人吧~"的回复
-- 如果不属于任何预设话题，返回 matched: false
-
-只输出 JSON，格式：
-{{"matched": true, "topic_index": 1, "reply": "回复内容"}}
-或
-{{"matched": false}}"""
+        prompt = (
+            "判断用户消息是否语义上属于以下预设话题之一（语义相关即算，不要求措辞一致）。\n\n"
+            f"预设话题：\n{topics_text}\n\n"
+            f"用户消息：「{user_message}」\n\n"
+            '只输出 JSON：{"matched": true, "topic_index": 1} 或 {"matched": false}'
+        )
 
         raw = llm.chat(
-            system_prompt="你是一个精确的话题分类器，只输出 JSON，不输出任何其他内容。",
+            system_prompt="你是话题分类器，只输出 JSON。",
             messages=[{"role": "user", "content": prompt}],
-            max_tokens=150,
+            max_tokens=30,
             temperature=0.1,
         ).strip()
 
-        # 提取 JSON（容错：LLM 可能带 markdown 代码块）
         json_match = re.search(r'\{.*\}', raw, re.DOTALL)
         if not json_match:
-            return TopicGuardResult(blocked=False)
+            return ""
 
         result = json.loads(json_match.group())
         if not result.get("matched"):
-            return TopicGuardResult(blocked=False)
+            return ""
 
-        idx = result.get("topic_index", 1) - 1
-        idx = max(0, min(idx, len(topics) - 1))
-        matched_topic = topics[idx]
-        reply = result.get("reply") or _pick_deflect(user_message)
-        return TopicGuardResult(
-            blocked=True,
-            reply=reply,
-            strategy=matched_topic.get("strategy", "deflect") + "_semantic",
-        )
+        idx = max(0, min(result.get("topic_index", 1) - 1, len(topics) - 1))
+        return _build_hint(topics[idx])
 
     except Exception as e:
-        # LLM 调用失败时放行（宁可放行，不阻断正常对话）
-        print(f"[TOPIC_GUARD] LLM 语义匹配失败，放行: {e}")
-        return TopicGuardResult(blocked=False)
-
-
-def _build_result(topic: dict, user_message: str, matched_by: str = "keyword") -> TopicGuardResult:
-    """根据已命中的话题构建拦截结果"""
-    strategy = topic.get("strategy", "deflect")
-    if strategy == "preset_answer":
-        reply = topic.get("preset_content") or DEFLECT_REPLIES[0]
-    elif strategy == "deflect":
-        reply = _pick_deflect(user_message)
-    else:  # admit_unknown
-        reply = "这个我说不好，你直接问本人吧~"
-    return TopicGuardResult(blocked=True, reply=reply, strategy=f"{strategy}_{matched_by}")
+        print(f"[TOPIC_GUARD] 语义匹配失败，不注入提示: {e}")
+        return ""
 
 
 def _matches_any(text: str, keywords: list[str]) -> bool:
-    """检测文本是否包含任意关键词（忽略大小写和全角空格）"""
     text_clean = text.lower().replace(" ", "").replace("　", "")
     for kw in keywords:
         kw_clean = kw.lower().strip().replace(" ", "")
@@ -167,28 +157,24 @@ def _matches_any(text: str, keywords: list[str]) -> bool:
     return False
 
 
-def _pick_deflect(message: str) -> str:
-    """根据消息内容选择合适的回避回复"""
-    idx = hash(message[:10]) % len(DEFLECT_REPLIES)
-    return DEFLECT_REPLIES[idx]
-
-
 # ─────────────────────────────────────────────
 # CRUD
 # ─────────────────────────────────────────────
 
 def add_topic(
-    avatar_id: str,
+    avatar_id: Optional[str],
     trigger_keywords: list[str],
     strategy: str,
     preset_content: str = "",
     topic_description: str = "",
 ) -> dict:
-    """添加敏感话题预设，自动生成语义描述供 LLM 匹配使用"""
+    """
+    添加敏感话题预设。
+    avatar_id=None 表示全局话题，适用于所有替身。
+    """
     tid = new_id()
     kw_json = json.dumps(trigger_keywords, ensure_ascii=False)
 
-    # 若未手动传入描述，调用 LLM 自动生成
     if not topic_description:
         topic_description = _generate_topic_description(trigger_keywords, preset_content)
 
@@ -201,6 +187,7 @@ def add_topic(
         )
     return {
         "id": tid,
+        "avatar_id": avatar_id,
         "trigger_keywords": trigger_keywords,
         "topic_description": topic_description,
         "strategy": strategy,
@@ -209,23 +196,16 @@ def add_topic(
 
 
 def _generate_topic_description(keywords: list[str], preset_content: str) -> str:
-    """
-    调用 LLM 把关键词 + 预设答案转成一句话语义描述。
-    例：keywords=["月薪","工资"] preset="我月薪一万"
-      → "关于薪资收入工资待遇的问题"
-    失败时降级为关键词拼接。
-    """
     try:
         from backend.services.llm_provider import llm
         prompt = (
             f"用户为AI替身设置了一个敏感话题，关键词：{keywords}，"
             f"预设回答：「{preset_content}」。\n"
-            "请用一句话（15字以内）描述这个话题的语义范围，"
-            "要覆盖所有同义问法。只输出描述本身，不要加任何前缀或标点以外的文字。\n"
-            "示例输出：关于薪资收入工资待遇的问题"
+            "请用一句话（15字以内）描述这个话题的语义范围，覆盖所有同义问法。"
+            "只输出描述本身。示例：关于薪资收入工资待遇的问题"
         )
         desc = llm.chat(
-            system_prompt="你是一个话题意图描述生成器，输出简洁准确。",
+            system_prompt="你是话题意图描述生成器，输出简洁准确。",
             messages=[{"role": "user", "content": prompt}],
             max_tokens=40,
             temperature=0.2,
@@ -235,21 +215,36 @@ def _generate_topic_description(keywords: list[str], preset_content: str) -> str
         return "、".join(keywords)
 
 
-def list_topics(avatar_id: str) -> list[dict]:
+def list_topics(avatar_id: Optional[str] = None) -> list[dict]:
+    """
+    查询话题列表。
+    avatar_id=None 查全局话题；传入 avatar_id 查该替身专属话题。
+    """
     with get_db() as conn:
-        rows = rows_to_list(conn.execute(
-            "SELECT * FROM sensitive_topics WHERE avatar_id = ? ORDER BY created_at",
-            (avatar_id,),
-        ).fetchall())
+        if avatar_id is None:
+            rows = rows_to_list(conn.execute(
+                "SELECT * FROM sensitive_topics WHERE avatar_id IS NULL ORDER BY created_at",
+            ).fetchall())
+        else:
+            rows = rows_to_list(conn.execute(
+                "SELECT * FROM sensitive_topics WHERE avatar_id = ? ORDER BY created_at",
+                (avatar_id,),
+            ).fetchall())
     for r in rows:
         r["trigger_keywords"] = json.loads(r.get("trigger_keywords", "[]"))
     return rows
 
 
-def delete_topic(topic_id: str, avatar_id: str) -> bool:
+def delete_topic(topic_id: str, avatar_id: Optional[str] = None) -> bool:
     with get_db() as conn:
-        cur = conn.execute(
-            "DELETE FROM sensitive_topics WHERE id = ? AND avatar_id = ?",
-            (topic_id, avatar_id),
-        )
+        if avatar_id is None:
+            cur = conn.execute(
+                "DELETE FROM sensitive_topics WHERE id = ? AND avatar_id IS NULL",
+                (topic_id,),
+            )
+        else:
+            cur = conn.execute(
+                "DELETE FROM sensitive_topics WHERE id = ? AND avatar_id = ?",
+                (topic_id, avatar_id),
+            )
     return cur.rowcount > 0

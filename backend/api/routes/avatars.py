@@ -10,7 +10,13 @@ from backend.utils.auth import require_auth, new_id
 
 avatars_bp = Blueprint("avatars", __name__, url_prefix="/api/avatars")
 
-VALID_RELATIONSHIPS = {"son", "boyfriend", "friend", "custom"}
+VALID_RELATIONSHIPS = {
+    "son", "daughter",
+    "boyfriend", "girlfriend",
+    "elder_brother", "younger_brother",
+    "elder_sister", "younger_sister",
+    "friend", "custom",
+}
 
 
 @avatars_bp.get("")
@@ -35,6 +41,8 @@ def create_avatar():
     name = (data.get("name") or "").strip()
     relationship = data.get("relationship", "custom")
 
+    identity_desc = (data.get("identity_desc") or "").strip()
+
     if not name:
         return jsonify({"error": "name 不能为空"}), 400
     if relationship not in VALID_RELATIONSHIPS:
@@ -45,15 +53,16 @@ def create_avatar():
 
     with get_db() as conn:
         conn.execute(
-            """INSERT INTO avatars (id, creator_id, name, relationship, share_code)
-               VALUES (?, ?, ?, ?, ?)""",
-            (aid, g.user_id, name, relationship, share_code),
+            """INSERT INTO avatars (id, creator_id, name, relationship, identity_desc, share_code)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (aid, g.user_id, name, relationship, identity_desc, share_code),
         )
 
     return jsonify({
         "id": aid,
         "name": name,
         "relationship": relationship,
+        "identity_desc": identity_desc,
         "share_code": share_code,
         "status": "active",
     }), 201
@@ -99,8 +108,10 @@ def update_avatar(avatar_id):
     data = request.get_json() or {}
     fields = []
     values = []
-    for field in ("name", "status"):
+    for field in ("name", "status", "identity_desc", "relationship"):
         if field in data:
+            if field == "relationship" and data[field] not in VALID_RELATIONSHIPS:
+                return jsonify({"error": f"relationship 无效"}), 400
             fields.append(f"{field} = ?")
             values.append(data[field])
 
@@ -115,6 +126,20 @@ def update_avatar(avatar_id):
             f"UPDATE avatars SET {', '.join(fields)} WHERE id = ?", values
         )
 
+    return jsonify({"ok": True})
+
+
+@avatars_bp.delete("/<avatar_id>")
+@require_auth
+def delete_avatar(avatar_id):
+    """软删除替身（仅创建者，设 status='deleted'）"""
+    with get_db() as conn:
+        cur = conn.execute(
+            "UPDATE avatars SET status='deleted', updated_at=datetime('now') WHERE id=? AND creator_id=?",
+            (avatar_id, g.user_id),
+        )
+    if cur.rowcount == 0:
+        return jsonify({"error": "替身不存在或无权限"}), 404
     return jsonify({"ok": True})
 
 

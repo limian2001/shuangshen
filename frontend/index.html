@@ -184,6 +184,10 @@ select { cursor: pointer; }
 .ingest-result { background: var(--teal-light); border: 1px solid rgba(15,110,86,.2); border-radius: var(--radius); padding: 14px 16px; margin-top: 14px; }
 .ingest-result .stat { font-size: 13px; margin-bottom: 4px; }
 .ingest-result .stat span { font-weight: 600; color: var(--teal); }
+.sender-card { border: 2px solid var(--border-md); border-radius: var(--radius); padding: 12px 16px; cursor: pointer; text-align: center; transition: all .15s; min-width: 90px; }
+.sender-card:hover { border-color: var(--purple-mid); background: var(--purple-light); }
+.sender-card.selected { border-color: var(--purple); background: var(--purple-light); }
+.sender-card.guessed { border-style: dashed; border-color: var(--purple-mid); }
 </style>
 </head>
 <body>
@@ -217,7 +221,7 @@ select { cursor: pointer; }
   <div id="sidebar">
     <div class="sidebar-brand">
       <h1>替身</h1>
-      <p>Shuangshen v0.1</p>
+      <p>Shuangshen v0.3</p>
     </div>
     <div class="sidebar-user">
       <div class="avatar-sm" id="user-initials">?</div>
@@ -236,6 +240,10 @@ select { cursor: pointer; }
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 12V22H4V12"/><path d="M22 7H2v5h20V7z"/><path d="M12 22V7"/><path d="M12 7H7.5a2.5 2.5 0 010-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 000-5C13 2 12 7 12 7z"/></svg>
         绑定的替身
       </div>
+      <div class="nav-item" onclick="showPage('topics')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        全局话题预设
+      </div>
     </div>
     <div id="avatar-sidebar-section" style="display:none">
       <div class="nav-section" style="margin-top:6px">
@@ -247,10 +255,6 @@ select { cursor: pointer; }
         <div class="avatar-nav-item" id="snav-memories" onclick="showAvatarPage('memories')">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
           记忆与观点
-        </div>
-        <div class="avatar-nav-item" id="snav-topics" onclick="showAvatarPage('topics')">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-          敏感话题
         </div>
         <div class="avatar-nav-item" id="snav-ingest" onclick="showAvatarPage('ingest')">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0018 9h-1.26A8 8 0 103 16.3"/></svg>
@@ -294,13 +298,23 @@ select { cursor: pointer; }
         <div class="row">
           <div class="field"><label>替身名称</label><input type="text" id="new-avatar-name" placeholder="如：小王（儿子）"></div>
           <div class="field"><label>关系类型</label>
-            <select id="new-avatar-rel">
-              <option value="son">儿子 / 女儿</option>
-              <option value="boyfriend">男友 / 女友</option>
+            <select id="new-avatar-rel" onchange="onRelChange()">
+              <option value="son">儿子</option>
+              <option value="daughter">女儿</option>
+              <option value="boyfriend">男友</option>
+              <option value="girlfriend">女友</option>
+              <option value="elder_brother">哥哥</option>
+              <option value="younger_brother">弟弟</option>
+              <option value="elder_sister">姐姐</option>
+              <option value="younger_sister">妹妹</option>
               <option value="friend">朋友</option>
               <option value="custom">自定义</option>
             </select>
           </div>
+        </div>
+        <div class="field" id="new-avatar-desc-field">
+          <label>人设描述（已根据关系预填，可修改）</label>
+          <textarea id="new-avatar-desc" style="min-height:90px" placeholder="描述这个替身的背景、性格特点、说话方式…"></textarea>
         </div>
         <div style="display:flex;gap:8px;margin-top:4px">
           <button class="btn btn-primary btn-sm" onclick="doCreateAvatar()">创建</button>
@@ -389,11 +403,11 @@ select { cursor: pointer; }
       </div>
     </div>
 
-    <!-- Page: sensitive topics -->
+    <!-- Page: sensitive topics (global) -->
     <div id="page-topics" class="page" style="display:none">
       <div class="page-header">
-        <h2>敏感话题预设</h2>
-        <p>设定特殊话题的回答方式，替身不会自行发挥</p>
+        <h2>全局话题预设</h2>
+        <p>对所有替身生效的话题规则。命中后由 LLM 结合情绪灵活回应，不再死板照搬预设。</p>
       </div>
       <div class="card" style="margin-bottom:20px">
         <div class="card-title">添加预设</div>
@@ -426,67 +440,128 @@ select { cursor: pointer; }
     <!-- Page: ingest -->
     <div id="page-ingest" class="page" style="display:none">
       <div class="page-header">
-        <h2>喂数据</h2>
-        <p>上传微信聊天记录，让替身学习你的说话方式</p>
+        <h2>喂入聊天数据</h2>
+        <p>导入聊天记录后，替身会学习你的说话风格，并自动提取你的观点、经历和性格特点</p>
       </div>
-      <div class="card" style="margin-bottom:16px">
-        <div class="card-title">如何导出微信聊天记录</div>
-        <div style="font-size:13px;color:var(--text-2);line-height:1.8">
-          1. 打开 <strong>微信 PC 客户端</strong>（Mac 或 Windows）<br>
-          2. 进入与对方的聊天窗口<br>
-          3. 点击右上角「...」→「查找聊天记录」→「导出聊天记录」<br>
-          4. 选择「导出为文本文件 (.txt)」<br>
-          5. 上传导出的 txt 文件
+
+      <!-- 流程说明 -->
+      <div class="card" style="margin-bottom:16px;background:var(--purple-light);border-color:rgba(83,74,183,.2)">
+        <div style="display:flex;gap:20px;flex-wrap:wrap">
+          <div style="flex:1;min-width:140px;text-align:center;padding:8px 0">
+            <div style="font-size:22px;margin-bottom:4px">📋</div>
+            <div style="font-size:12px;font-weight:600;color:var(--purple)">① 导入聊天</div>
+            <div style="font-size:11px;color:var(--text-2);margin-top:2px">粘贴或上传聊天记录</div>
+          </div>
+          <div style="display:flex;align-items:center;color:var(--purple-mid);font-size:18px">→</div>
+          <div style="flex:1;min-width:140px;text-align:center;padding:8px 0">
+            <div style="font-size:22px;margin-bottom:4px">🤖</div>
+            <div style="font-size:12px;font-weight:600;color:var(--purple)">② AI 语义解析</div>
+            <div style="font-size:11px;color:var(--text-2);margin-top:2px">自动提取事实、观点、风格</div>
+          </div>
+          <div style="display:flex;align-items:center;color:var(--purple-mid);font-size:18px">→</div>
+          <div style="flex:1;min-width:140px;text-align:center;padding:8px 0">
+            <div style="font-size:22px;margin-bottom:4px">✨</div>
+            <div style="font-size:12px;font-weight:600;color:var(--purple)">③ 替身更新</div>
+            <div style="font-size:11px;color:var(--text-2);margin-top:2px">人格 Prompt 自动重建</div>
+          </div>
         </div>
       </div>
+
       <div class="card">
-        <div class="card-title">上传聊天记录</div>
-        <div style="display:flex;gap:8px;margin-bottom:14px">
-          <button class="btn btn-secondary btn-sm" id="tab-upload" onclick="switchIngestTab('upload')" style="background:var(--purple-light);color:var(--purple);border-color:var(--purple-mid)">上传 .txt 文件</button>
-          <button class="btn btn-secondary btn-sm" id="tab-paste" onclick="switchIngestTab('paste')">直接粘贴文本</button>
+        <!-- Tab 切换，默认粘贴 -->
+        <div style="display:flex;gap:8px;margin-bottom:18px">
+          <button class="btn btn-secondary btn-sm" id="tab-paste" onclick="switchIngestTab('paste')" style="background:var(--purple-light);color:var(--purple);border-color:var(--purple-mid)">
+            ✂️ 直接粘贴（推荐）
+          </button>
+          <button class="btn btn-secondary btn-sm" id="tab-upload" onclick="switchIngestTab('upload')">
+            📁 上传 .txt 文件
+          </button>
         </div>
 
-        <div id="ingest-tab-upload">
-        <div class="upload-zone" id="upload-zone" onclick="document.getElementById('file-input').click()" ondragover="handleDrag(event)" ondrop="handleDrop(event)">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0018 9h-1.26A8 8 0 103 16.3"/></svg>
-          <p>点击或拖拽上传 .txt 文件</p>
-          <div class="hint">支持微信 PC 端导出的聊天记录文本格式</div>
-        </div>
-        <input type="file" id="file-input" accept=".txt" style="display:none" onchange="handleFileSelect(event)">
-
-        <div id="upload-info" style="display:none;margin-top:14px">
-          <div style="display:flex;align-items:center;gap:10px">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--purple)" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-            <span id="upload-filename" style="font-size:13px;font-weight:500"></span>
-            <span id="upload-filesize" style="font-size:12px;color:var(--text-3)"></span>
+        <!-- Tab: 粘贴（默认显示） -->
+        <div id="ingest-tab-paste">
+          <div style="background:var(--bg);border-radius:var(--radius);padding:12px 14px;margin-bottom:14px;font-size:12px;color:var(--text-2);line-height:1.9">
+            <strong style="color:var(--text)">支持以下任意格式，直接粘贴进来即可：</strong><br>
+            <span style="color:var(--text-3)">① 微信聊天记录（手机 → 聊天 → 右上角「…」→「更多」→「邮件聊天记录」，复制邮件内容）</span><br>
+            <span style="color:var(--text-3)">② 简单格式：每行写「名字: 内容」，如「小王: 今天好累啊」</span><br>
+            <span style="color:var(--text-3)">③ 任意文本段落，系统会尽力解析</span>
           </div>
-          <div class="field" style="margin-top:12px">
-            <label>你在聊天记录中的名字（选填，不填自动推断）</label>
-            <input type="text" id="my-names" placeholder="如：小王（与聊天记录中显示的名字一致）">
-          </div>
-          <button class="btn btn-primary" onclick="doUpload()" id="upload-btn">开始解析</button>
-        </div>
-
-        <div id="upload-progress" style="display:none;margin-top:14px">
-          <div style="font-size:13px;color:var(--text-2)">正在解析中...</div>
-          <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:30%"></div></div>
-        </div>
-
-        <div id="upload-result" style="display:none"></div>
-        </div><!-- /ingest-tab-upload -->
-
-        <div id="ingest-tab-paste" style="display:none">
+          <!-- 步骤 1：粘贴内容 -->
           <div class="field">
-            <label>粘贴聊天记录文本</label>
-            <textarea id="paste-content" style="min-height:200px;font-size:12px;font-family:monospace" placeholder="直接把微信聊天记录复制粘贴进来，格式如：&#10;2024-01-01 09:00:00 小王&#10;你好啊爸&#10;&#10;2024-01-01 09:01:00 老王&#10;吃饭了没"></textarea>
+            <label>聊天记录内容</label>
+            <textarea id="paste-content" style="min-height:200px;font-size:12px;font-family:monospace;line-height:1.6" placeholder="把聊天记录粘贴到这里…
+
+支持格式示例：
+2024-01-01 09:00 小王
+妈你吃饭了没
+
+2024-01-01 09:01 妈妈
+吃了，你呢
+
+—— 或者 ——
+
+小王: 最近项目有点忙，过年才能回来
+妈妈: 注意身体啊"></textarea>
           </div>
-          <div class="field">
-            <label>你在聊天记录中的名字</label>
-            <input type="text" id="paste-myname" placeholder="如：小王（必填，用于识别哪些是你说的）">
+          <button class="btn btn-secondary" onclick="detectSenders('paste')">
+            🔍 检测发言人
+          </button>
+
+          <!-- 步骤 2：选择「我是谁」（检测后显示） -->
+          <div id="paste-sender-step" style="display:none;margin-top:16px;padding:14px;background:var(--bg);border-radius:var(--radius);border:1px solid var(--border-md)">
+            <div style="font-size:13px;font-weight:600;margin-bottom:4px">共检测到 <span id="paste-total-msg"></span> 条消息，请选择哪个是「你」（替身）：</div>
+            <div style="font-size:11px;color:var(--text-3);margin-bottom:12px">系统会学习你说话的风格，所以必须选对 😊</div>
+            <div id="paste-sender-cards" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px"></div>
+            <button class="btn btn-primary" id="paste-confirm-btn" onclick="doConfirmedImport('paste')" disabled>
+              确认并导入
+            </button>
           </div>
-          <button class="btn btn-primary btn-sm" onclick="doPaste()">解析并导入</button>
-          <div id="paste-result" style="display:none;margin-top:12px"></div>
+          <div id="paste-result" style="display:none;margin-top:14px"></div>
         </div><!-- /ingest-tab-paste -->
+
+        <!-- Tab: 上传文件（默认隐藏） -->
+        <div id="ingest-tab-upload" style="display:none">
+          <div style="background:var(--bg);border-radius:var(--radius);padding:12px 14px;margin-bottom:14px;font-size:12px;color:var(--text-2);line-height:1.9">
+            <strong style="color:var(--text)">获取微信 .txt 文件的方法：</strong><br>
+            <span style="color:var(--text-3)">① 手机微信 → 进入聊天 → 右上角「…」→「更多」→「邮件聊天记录」→ 保存附件 .txt</span><br>
+            <span style="color:var(--text-3)">② PC 微信 → 聊天窗口右上角「…」→「备份与迁移」→ 第三方工具导出为 .txt</span><br>
+            <span style="color:var(--text-3)">③ 也支持自己整理的纯文本文件（UTF-8 或 GBK 编码）</span>
+          </div>
+          <!-- 步骤 1：选择文件 -->
+          <div class="upload-zone" id="upload-zone" onclick="document.getElementById('file-input').click()" ondragover="handleDrag(event)" ondrop="handleDrop(event)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0018 9h-1.26A8 8 0 103 16.3"/></svg>
+            <p>点击或拖拽上传 .txt 文件</p>
+            <div class="hint">支持 UTF-8 / GBK 编码，单次上限 50 万字</div>
+          </div>
+          <input type="file" id="file-input" accept=".txt" style="display:none" onchange="handleFileSelect(event)">
+
+          <div id="upload-info" style="display:none;margin-top:14px">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--purple)" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              <span id="upload-filename" style="font-size:13px;font-weight:500"></span>
+              <span id="upload-filesize" style="font-size:12px;color:var(--text-3)"></span>
+            </div>
+            <button class="btn btn-secondary" onclick="detectSenders('upload')">
+              🔍 检测发言人
+            </button>
+          </div>
+
+          <!-- 步骤 2：选择「我是谁」 -->
+          <div id="upload-sender-step" style="display:none;margin-top:16px;padding:14px;background:var(--bg);border-radius:var(--radius);border:1px solid var(--border-md)">
+            <div style="font-size:13px;font-weight:600;margin-bottom:4px">共检测到 <span id="upload-total-msg"></span> 条消息，请选择哪个是「你」（替身）：</div>
+            <div style="font-size:11px;color:var(--text-3);margin-bottom:12px">系统会学习你说话的风格，所以必须选对 😊</div>
+            <div id="upload-sender-cards" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px"></div>
+            <button class="btn btn-primary" id="upload-confirm-btn" onclick="doConfirmedImport('upload')" disabled>
+              确认并导入
+            </button>
+          </div>
+
+          <div id="upload-progress" style="display:none;margin-top:14px">
+            <div style="font-size:13px;color:var(--text-2)">正在解析（LLM 语义分析需要约 10-20 秒）...</div>
+            <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:30%"></div></div>
+          </div>
+          <div id="upload-result" style="display:none"></div>
+        </div><!-- /ingest-tab-upload -->
 
       </div>
 
@@ -500,26 +575,41 @@ select { cursor: pointer; }
     <div id="page-identity" class="page" style="display:none">
       <div class="page-header">
         <h2>替身人设</h2>
-        <p>设置替身的基本身份信息，让替身知道自己是谁</p>
+        <p>人设描述会直接注入替身的思维，越详细替身越像本人</p>
       </div>
       <div class="card">
         <div class="card-title">基本信息</div>
-        <div class="field">
-          <label>替身名称（对方看到的名字）</label>
-          <input type="text" id="identity-name" placeholder="如：面面哥哥">
+        <div class="row">
+          <div class="field">
+            <label>替身名称（对方看到的名字）</label>
+            <input type="text" id="identity-name" placeholder="如：面面哥哥">
+          </div>
+          <div class="field">
+            <label>关系类型</label>
+            <select id="identity-rel" onchange="onIdentityRelChange()">
+              <option value="son">儿子</option>
+              <option value="daughter">女儿</option>
+              <option value="boyfriend">男友</option>
+              <option value="girlfriend">女友</option>
+              <option value="elder_brother">哥哥</option>
+              <option value="younger_brother">弟弟</option>
+              <option value="elder_sister">姐姐</option>
+              <option value="younger_sister">妹妹</option>
+              <option value="friend">朋友</option>
+              <option value="custom">自定义</option>
+            </select>
+          </div>
         </div>
         <div class="field">
-          <label>自我介绍 / 人设描述</label>
-          <textarea id="identity-desc" placeholder="如：我是面面，在上海工作的程序员，老家湖南，平时喜欢打篮球和看电影。这个替身是为了陪爸妈聊天用的。"></textarea>
-        </div>
-        <div class="field">
-          <label>不知道时的默认回答方式</label>
-          <select id="identity-unknown">
-            <option value="vague">模糊带过（"这个嘛，我再想想"）</option>
-            <option value="honest">坦白说不知道（"这个我记不清了，你问本人吧"）</option>
-          </select>
+          <label>人设描述 / 背景信息</label>
+          <textarea id="identity-desc" style="min-height:130px" placeholder="例：我是面面，在上海工作的程序员，老家湖南，平时喜欢打篮球和看电影。这个替身是为了陪爸妈聊天用的，让他们感觉我在身边。遇到不知道的事情，我会说我记不太清了。"></textarea>
+          <div style="font-size:11px;color:var(--text-3);margin-top:4px">这段描述会直接作为替身的"自我认知"，可以写：居住城市、工作、兴趣爱好、性格特点、与对方的关系故事等</div>
         </div>
         <button class="btn btn-primary btn-sm" onclick="doSaveIdentity()">保存人设</button>
+      </div>
+      <div class="card" style="margin-top:14px">
+        <div class="card-title">LLM 风格分析</div>
+        <div style="font-size:13px;color:var(--text-2)" id="persona-prompt-display">导入聊天记录后，系统会自动分析说话风格并展示在这里。</div>
       </div>
     </div>
 
@@ -556,6 +646,20 @@ let currentUser = JSON.parse(localStorage.getItem('ss_user') || 'null');
 let currentAvatar = null;
 let memPage = 1;
 let uploadFile = null;
+
+// 各关系类型的默认人设描述
+const REL_PRESETS = {
+  son:             "我是你儿子，目前在外地工作/上学，平时比较忙，但经常挂念家里人。说话随意自然，偶尔撒娇，不喜欢太正式的称呼。",
+  daughter:        "我是你女儿，目前在外地工作/上学，平时比较忙，但很惦记家里人，时不时喜欢找你聊聊天、撒个娇。",
+  boyfriend:       "我是你男朋友，很爱你，关心你日常生活和情绪状态。你不开心的时候我会陪着你，会主动问你发生了什么。",
+  girlfriend:      "我是你女朋友，很爱你，关心你日常生活和情绪状态。你不开心的时候我会陪着你，偶尔也会撒个娇。",
+  elder_brother:   "我是你哥哥，平时话不多，但很关心你。你有什么事情可以跟我说，我会认真听，也会替你出主意。",
+  younger_brother: "我是你弟弟，跟你关系很好，有时候还是会找你帮忙。在慢慢长大，也开始关心你了。",
+  elder_sister:    "我是你姐姐，关心你，有时候会叮嘱你注意身体、照顾好自己。你有烦心事可以跟我说，我会陪你聊。",
+  younger_sister:  "我是你妹妹，跟你关系特别好，什么话都喜欢跟你说，偶尔也找你撒个娇。",
+  friend:          "我是你的老朋友，我们认识很久了，相处很自然放松，什么话都能聊，不用顾虑太多。",
+  custom:          "",
+};
 
 // ─── Init ───────────────────────────────────
 window.onload = () => {
@@ -634,29 +738,34 @@ function doLogout() {
 
 // ─── Navigation ──────────────────────────────
 function showPage(page) {
-  const pages = ['avatars','received','chat','memories','topics','ingest','share'];
+  const pages = ['avatars','received','topics','chat','memories','ingest','identity','share'];
   pages.forEach(p => {
     const el = document.getElementById('page-' + p);
     if (el) el.style.display = 'none';
   });
   const target = document.getElementById('page-' + page);
-  if (target) target.style.display = page === 'chat' ? 'block' : 'block';
+  if (target) target.style.display = 'block';
 
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  const navItems = document.querySelectorAll('.nav-item');
 
   if (page === 'avatars') {
-    document.querySelectorAll('.nav-item')[0].classList.add('active');
+    navItems[0]?.classList.add('active');
     document.getElementById('avatar-sidebar-section').style.display = 'none';
   } else if (page === 'received') {
-    document.querySelectorAll('.nav-item')[1].classList.add('active');
+    navItems[1]?.classList.add('active');
     document.getElementById('avatar-sidebar-section').style.display = 'none';
     loadReceived();
+  } else if (page === 'topics') {
+    navItems[2]?.classList.add('active');
+    document.getElementById('avatar-sidebar-section').style.display = 'none';
+    loadTopics();
   }
 }
 
 function showAvatarPage(sub) {
   if (!currentAvatar) return;
-  const subs = ['chat','memories','topics','ingest','identity','share'];
+  const subs = ['chat','memories','ingest','identity','share'];
   subs.forEach(s => {
     const el = document.getElementById('page-' + s);
     if (el) el.style.display = 'none';
@@ -667,8 +776,7 @@ function showAvatarPage(sub) {
 
   if (sub === 'chat') loadChatHistory();
   if (sub === 'memories') { memPage = 1; loadMemories(); }
-  if (sub === 'topics') loadTopics();
-  if (sub === 'ingest') loadIngestJobs();
+  if (sub === 'ingest') { switchIngestTab('paste'); loadIngestJobs(); }
   if (sub === 'share') loadShareCode();
   if (sub === 'identity') loadIdentity();
 }
@@ -705,7 +813,10 @@ async function loadAvatars() {
   }
   grid.innerHTML = list.map(a => `
     <div class="avatar-card" id="avatar-card-${a.id}" onclick="selectAvatar(${JSON.stringify(a).replace(/"/g,'&quot;')})">
-      <div class="avatar-icon">${relEmoji(a.relationship)}</div>
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div class="avatar-icon">${relEmoji(a.relationship)}</div>
+        <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();doDeleteAvatar('${a.id}','${esc(a.name)}')" title="删除替身" style="padding:4px 8px;font-size:11px">删除</button>
+      </div>
       <h3>${esc(a.name)}</h3>
       <div style="margin-top:6px"><span class="rel-tag">${relLabel(a.relationship)}</span></div>
       <div class="avatar-meta">
@@ -716,19 +827,47 @@ async function loadAvatars() {
     </div>`).join('');
 }
 
-function showCreateAvatar() { document.getElementById('create-avatar-card').style.display = 'block'; }
+function showCreateAvatar() {
+  document.getElementById('create-avatar-card').style.display = 'block';
+  onRelChange(); // 初始化预设描述
+}
 function hideCreateAvatar() { document.getElementById('create-avatar-card').style.display = 'none'; }
 
+function onRelChange() {
+  const rel = document.getElementById('new-avatar-rel').value;
+  const ta = document.getElementById('new-avatar-desc');
+  // 只有当前内容是某个预设（或为空）时才自动填充，不覆盖用户手动输入
+  const isPreset = Object.values(REL_PRESETS).includes(ta.value) || ta.value === '';
+  if (isPreset) ta.value = REL_PRESETS[rel] || '';
+}
+
 async function doCreateAvatar() {
-  const name = v('new-avatar-name'), rel = v('new-avatar-rel');
+  const name = v('new-avatar-name');
+  const rel = v('new-avatar-rel');
+  const identity_desc = v('new-avatar-desc').trim();
   if (!name) return toast('请填写替身名称', 'error');
-  const res = await api('POST', '/api/avatars', { name, relationship: rel });
+  const res = await api('POST', '/api/avatars', { name, relationship: rel, identity_desc });
   if (res.id) {
     toast('替身「' + name + '」创建成功！', 'success');
     hideCreateAvatar();
     document.getElementById('new-avatar-name').value = '';
+    document.getElementById('new-avatar-desc').value = '';
     await loadAvatars();
     selectAvatar(res);
+  }
+}
+
+async function doDeleteAvatar(id, name) {
+  if (!confirm(`确认删除替身「${name}」？\n删除后将无法恢复，包括所有记忆和对话记录。`)) return;
+  const res = await api('DELETE', '/api/avatars/' + id);
+  if (res && res.ok) {
+    toast('替身「' + name + '」已删除', 'success');
+    if (currentAvatar?.id === id) {
+      currentAvatar = null;
+      document.getElementById('avatar-sidebar-section').style.display = 'none';
+    }
+    await loadAvatars();
+    showPage('avatars');
   }
 }
 
@@ -811,7 +950,7 @@ function appendMsg(role, content, animate, intercepted) {
   div.innerHTML = `
     <div class="msg-avatar">${initials}</div>
     <div>
-      <div class="msg-bubble">${esc(content).replace(/\n/g,'<br>')}${intercepted ? '<span class="intercept-badge">已拦截</span>' : ''}</div>
+      <div class="msg-bubble">${esc(renderEmoji(content)).replace(/\n/g,'<br>')}${intercepted ? '<span class="intercept-badge">已拦截</span>' : ''}</div>
     </div>`;
   if (animate) div.style.animation = 'none';
   box.appendChild(div);
@@ -885,10 +1024,9 @@ async function doAddMemory() {
   }
 }
 
-// ─── Topics ──────────────────────────────────
+// ─── Topics (全局，与替身无关) ─────────────────
 async function loadTopics() {
-  if (!currentAvatar) return;
-  const list = await api('GET', '/api/avatars/' + currentAvatar.id + '/topics');
+  const list = await api('GET', '/api/topics');
   const el = document.getElementById('topics-list');
   if (!list || list.length === 0) {
     el.innerHTML = '<div class="empty"><p>暂无预设，添加第一条</p></div>';
@@ -897,10 +1035,11 @@ async function loadTopics() {
   el.innerHTML = list.map(t => `
     <div class="topic-item">
       <div style="flex:1">
+        ${t.topic_description ? `<div style="font-size:13px;font-weight:500;margin-bottom:4px">${esc(t.topic_description)}</div>` : ''}
         <div class="kw-tags">${t.trigger_keywords.map(k => `<span class="kw-tag">${esc(k)}</span>`).join('')}</div>
         <div style="margin-top:6px;display:flex;align-items:center;gap:8px">
           <span class="strategy-badge strategy-${t.strategy}">${strategyLabel(t.strategy)}</span>
-          ${t.preset_content ? `<span style="font-size:12px;color:var(--text-2)">"${esc(t.preset_content.slice(0,40))}${t.preset_content.length>40?'...':''}"</span>` : ''}
+          ${t.preset_content ? `<span style="font-size:12px;color:var(--text-2)">"${esc(t.preset_content.slice(0,50))}${t.preset_content.length>50?'...':''}"</span>` : ''}
         </div>
       </div>
       <button class="btn btn-danger btn-sm" onclick="doDeleteTopic('${t.id}')">删除</button>
@@ -908,13 +1047,12 @@ async function loadTopics() {
 }
 
 async function doAddTopic() {
-  if (!currentAvatar) return;
   const kws = v('topic-kws').split(/[,，、\s]+/).map(k => k.trim()).filter(Boolean);
   const strategy = v('topic-strategy');
   const preset = v('topic-preset');
   if (!kws.length) return toast('请填写触发关键词', 'error');
   if (strategy === 'preset_answer' && !preset) return toast('请填写预设回答内容', 'error');
-  const res = await api('POST', '/api/avatars/' + currentAvatar.id + '/topics', {
+  const res = await api('POST', '/api/topics', {
     trigger_keywords: kws, strategy, preset_content: preset
   });
   if (res.id) {
@@ -927,13 +1065,88 @@ async function doAddTopic() {
 
 async function doDeleteTopic(id) {
   if (!confirm('确认删除这条预设？')) return;
-  const res = await api('DELETE', '/api/avatars/' + currentAvatar.id + '/topics/' + id);
+  const res = await api('DELETE', '/api/topics/' + id);
   if (res.ok) { toast('已删除', 'success'); loadTopics(); }
 }
 
 function togglePresetContent() {
   const s = document.getElementById('topic-strategy').value;
   document.getElementById('preset-content-field').style.display = s === 'preset_answer' ? 'block' : 'none';
+}
+
+// ─── Ingest 发言人检测 ───────────────────────
+// 存储每个 tab 当前选中的「我」
+const _ingestState = { paste: { myName: null }, upload: { myName: null } };
+
+async function detectSenders(tab) {
+  if (!currentAvatar) return;
+  let res;
+
+  if (tab === 'paste') {
+    const text = document.getElementById('paste-content').value.trim();
+    if (!text) return toast('请先粘贴聊天记录', 'error');
+    res = await api('POST', '/api/ingest/' + currentAvatar.id + '/detect', { text });
+  } else {
+    if (!uploadFile) return toast('请先选择文件', 'error');
+    const fd = new FormData();
+    fd.append('file', uploadFile);
+    try {
+      const r = await fetch(API + '/api/ingest/' + currentAvatar.id + '/detect', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + token },
+        body: fd,
+      });
+      res = await r.json();
+      if (!r.ok) { toast(res.error || '检测失败', 'error'); return; }
+    } catch (e) { toast('网络错误', 'error'); return; }
+  }
+
+  if (!res || !res.senders) return;
+
+  _ingestState[tab].myName = null;
+  document.getElementById(`${tab}-confirm-btn`).disabled = true;
+  document.getElementById(`${tab}-total-msg`).textContent = res.total_messages;
+
+  const cardsEl = document.getElementById(`${tab}-sender-cards`);
+  if (res.senders.length === 0) {
+    cardsEl.innerHTML = '<div style="font-size:13px;color:var(--text-3)">未检测到发言人，请确认格式是否正确</div>';
+  } else {
+    cardsEl.innerHTML = res.senders.map(s => `
+      <div class="sender-card ${s.is_me_guess ? 'guessed' : ''}"
+           id="sc-${tab}-${esc(s.name)}"
+           onclick="selectSender('${tab}','${esc(s.name)}')">
+        <div style="font-size:14px;font-weight:600">${esc(s.name)}</div>
+        <div style="font-size:11px;color:var(--text-3);margin-top:3px">${s.count} 条消息</div>
+        ${s.is_me_guess ? '<div style="font-size:10px;color:var(--purple);margin-top:3px">系统猜测</div>' : ''}
+      </div>`).join('');
+    // 自动高亮系统猜测的
+    const guessed = res.senders.find(s => s.is_me_guess);
+    if (guessed) selectSender(tab, guessed.name);
+  }
+
+  document.getElementById(`${tab}-sender-step`).style.display = 'block';
+}
+
+function selectSender(tab, name) {
+  _ingestState[tab].myName = name;
+  // 更新高亮
+  document.querySelectorAll(`[id^="sc-${tab}-"]`).forEach(c => c.classList.remove('selected'));
+  const card = document.getElementById(`sc-${tab}-${name}`);
+  if (card) card.classList.add('selected');
+  document.getElementById(`${tab}-confirm-btn`).disabled = false;
+}
+
+async function doConfirmedImport(tab) {
+  const myName = _ingestState[tab].myName;
+  if (!myName) return toast('请先选择哪个是你', 'error');
+
+  if (tab === 'paste') {
+    const text = document.getElementById('paste-content').value.trim();
+    if (!text) return toast('聊天内容不能为空', 'error');
+    await _runPasteImport(text, myName);
+  } else {
+    await _runUploadImport(myName);
+  }
 }
 
 // ─── Ingest ──────────────────────────────────
@@ -944,48 +1157,37 @@ function switchIngestTab(tab) {
   document.getElementById('tab-paste').style.cssText = tab === 'paste' ? 'background:var(--purple-light);color:var(--purple);border-color:var(--purple-mid)' : '';
 }
 
-async function doPaste() {
-  if (!currentAvatar) return;
-  const text = document.getElementById('paste-content').value.trim();
-  const myName = document.getElementById('paste-myname').value.trim();
-  if (!text) return toast('请粘贴聊天记录', 'error');
-  if (!myName) return toast('请填写你的名字', 'error');
-
-  // Create a blob and upload as file
-  const blob = new Blob([text], { type: 'text/plain' });
-  const file = new File([blob], 'paste_import.txt', { type: 'text/plain' });
-  const fd = new FormData();
-  fd.append('file', file);
-  fd.append('my_names', myName);
-
-  document.getElementById('paste-result').style.display = 'block';
-  document.getElementById('paste-result').innerHTML = '<div style="font-size:13px;color:var(--text-2)">解析中...</div>';
+async function _runPasteImport(text, myName) {
+  const resultEl = document.getElementById('paste-result');
+  resultEl.style.display = 'block';
+  resultEl.innerHTML = '<div style="font-size:13px;color:var(--text-2)">导入中，LLM 语义分析约需 10-20 秒…</div>';
+  document.getElementById('paste-confirm-btn').disabled = true;
 
   try {
-    const resp = await fetch(API + '/api/ingest/' + currentAvatar.id + '/wechat', {
+    const resp = await fetch(API + '/api/ingest/' + currentAvatar.id + '/paste', {
       method: 'POST',
-      headers: { 'Authorization': 'Bearer ' + token },
-      body: fd
+      headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, my_names: myName }),
     });
     const res = await resp.json();
     if (res.stats) {
-      const s = res.stats;
-      document.getElementById('paste-result').innerHTML = `
-        <div class="ingest-result">
-          <div style="font-weight:600;margin-bottom:8px">✓ 解析完成</div>
-          <div class="stat">识别「我」的消息：<span>${s.my_messages}</span> 条</div>
-          <div class="stat">导入记忆库：<span>${s.imported_to_memory}</span> 条</div>
-        </div>`;
-      toast('导入 ' + s.imported_to_memory + ' 条记忆', 'success');
+      resultEl.innerHTML = _buildImportResult(res);
+      toast('导入成功，共 ' + res.stats.total_imported + ' 条记忆', 'success');
       document.getElementById('paste-content').value = '';
+      document.getElementById('paste-sender-step').style.display = 'none';
       loadIngestJobs();
     } else {
-      document.getElementById('paste-result').innerHTML = `<div style="color:var(--red);font-size:13px">${res.error || '解析失败'}</div>`;
+      resultEl.innerHTML = `<div style="color:var(--red);font-size:13px">${res.error || '导入失败'}</div>`;
+      document.getElementById('paste-confirm-btn').disabled = false;
     }
-  } catch(e) {
-    document.getElementById('paste-result').innerHTML = `<div style="color:var(--red);font-size:13px">网络错误</div>`;
+  } catch (e) {
+    resultEl.innerHTML = `<div style="color:var(--red);font-size:13px">网络错误</div>`;
+    document.getElementById('paste-confirm-btn').disabled = false;
   }
 }
+
+// 保留 doPaste 作空函数（旧按钮可能还会调用）
+function doPaste() { toast('请先点击「检测发言人」', 'error'); }
 
 // ─── Ingest ──────────────────────────────────
 function handleDrag(e) { e.preventDefault(); document.getElementById('upload-zone').classList.add('drag'); }
@@ -1005,60 +1207,65 @@ function setUploadFile(file) {
   document.getElementById('upload-result').style.display = 'none';
 }
 
-async function doUpload() {
+async function _runUploadImport(myName) {
   if (!uploadFile || !currentAvatar) return;
-  const myNames = v('my-names');
   const fd = new FormData();
   fd.append('file', uploadFile);
-  if (myNames) fd.append('my_names', myNames);
+  if (myName) fd.append('my_names', myName);
 
-  document.getElementById('upload-info').style.display = 'none';
+  document.getElementById('upload-sender-step').style.display = 'none';
   document.getElementById('upload-progress').style.display = 'block';
 
-  // Animate progress
   let pct = 30;
   const ticker = setInterval(() => {
-    pct = Math.min(pct + 10, 85);
+    pct = Math.min(pct + 8, 85);
     document.getElementById('progress-fill').style.width = pct + '%';
-  }, 400);
+  }, 500);
 
   try {
     const resp = await fetch(API + '/api/ingest/' + currentAvatar.id + '/wechat', {
       method: 'POST',
       headers: { 'Authorization': 'Bearer ' + token },
-      body: fd
+      body: fd,
     });
     clearInterval(ticker);
     document.getElementById('progress-fill').style.width = '100%';
     const res = await resp.json();
-
     document.getElementById('upload-progress').style.display = 'none';
 
+    const resultEl = document.getElementById('upload-result');
+    resultEl.style.display = 'block';
     if (res.stats) {
-      const s = res.stats;
-      document.getElementById('upload-result').style.display = 'block';
-      document.getElementById('upload-result').innerHTML = `
-        <div class="ingest-result">
-          <div style="font-weight:600;margin-bottom:8px">解析完成！</div>
-          <div class="stat">共解析消息：<span>${s.total_messages}</span> 条</div>
-          <div class="stat">识别为「我」的消息：<span>${s.my_messages}</span> 条</div>
-          <div class="stat">导入到记忆库：<span>${s.imported_to_memory}</span> 条</div>
-          <div class="stat">识别到的名字：<span>${(s.inferred_my_names||[]).join(', ')}</span></div>
-          <div class="stat">时间范围：<span>${s.date_range?.start?.slice(0,10)||'-'} ~ ${s.date_range?.end?.slice(0,10)||'-'}</span></div>
-          ${res.persona_rebuilt ? '<div style="margin-top:8px;font-size:12px;color:var(--teal)">✓ 人格 Prompt 已自动更新</div>' : ''}
-        </div>`;
-      toast('解析成功，导入 ' + s.imported_to_memory + ' 条记忆', 'success');
+      resultEl.innerHTML = _buildImportResult(res);
+      toast('导入成功，共 ' + res.stats.total_imported + ' 条记忆', 'success');
       uploadFile = null;
       loadIngestJobs();
     } else {
-      document.getElementById('upload-result').style.display = 'block';
-      document.getElementById('upload-result').innerHTML = `<div style="color:var(--red);font-size:13px;margin-top:10px">错误：${res.error || '未知错误'}</div>`;
+      resultEl.innerHTML = `<div style="color:var(--red);font-size:13px">错误：${res.error || '未知错误'}</div>`;
     }
   } catch (err) {
     clearInterval(ticker);
     document.getElementById('upload-progress').style.display = 'none';
     toast('上传失败：' + err.message, 'error');
   }
+}
+
+// 旧函数保留为空
+function doUpload() { toast('请先点击「检测发言人」', 'error'); }
+
+// 导入结果统一渲染
+function _buildImportResult(res) {
+  const s = res.stats;
+  return `<div class="ingest-result">
+    <div style="font-weight:600;margin-bottom:8px">✅ 导入完成！</div>
+    <div class="stat">共解析消息：<span>${s.total_messages}</span> 条</div>
+    <div class="stat">识别「我」的消息：<span>${s.my_messages}</span> 条</div>
+    <div class="stat">风格样本：<span>${s.style_samples_imported}</span> 条</div>
+    <div class="stat">AI 提取结构化记忆：<span>${s.semantic_memories_extracted}</span> 条</div>
+    <div class="stat">合计导入记忆库：<span>${s.total_imported}</span> 条</div>
+    ${s.date_range?.start ? `<div class="stat">时间范围：<span>${s.date_range.start.slice(0,10)} ~ ${s.date_range.end?.slice(0,10)||'-'}</span></div>` : ''}
+    ${res.persona_rebuilt ? '<div style="margin-top:8px;font-size:12px;color:var(--teal)">✓ 人格 Prompt 已自动更新</div>' : ''}
+  </div>`;
 }
 
 async function loadIngestJobs() {
@@ -1094,37 +1301,54 @@ function copyShareCode() {
 }
 
 // ─── Identity ────────────────────────────────
-function loadIdentity() {
+async function loadIdentity() {
   if (!currentAvatar) return;
-  document.getElementById('identity-name').value = currentAvatar.name || '';
-  // Load description from persona_prompt if exists - just prefill name for now
-  const desc = currentAvatar._identity_desc || '';
-  document.getElementById('identity-desc').value = desc;
+  // 从服务端获取最新数据（包含 identity_desc 和 persona_prompt）
+  const data = await api('GET', '/api/avatars/' + currentAvatar.id);
+  if (!data) return;
+
+  document.getElementById('identity-name').value = data.name || '';
+  document.getElementById('identity-desc').value = data.identity_desc || '';
+
+  // 同步 relationship 下拉
+  const relSel = document.getElementById('identity-rel');
+  if (relSel) relSel.value = data.relationship || 'custom';
+
+  // 展示 LLM 生成的风格分析
+  const promptEl = document.getElementById('persona-prompt-display');
+  if (promptEl) {
+    promptEl.textContent = data.persona_prompt
+      ? data.persona_prompt.replace(/^【关于这个人的性格与风格分析】\n?/, '')
+      : '导入聊天记录后，系统会自动分析说话风格并展示在这里。';
+  }
+
+  // 更新本地缓存
+  currentAvatar = { ...currentAvatar, ...data };
+}
+
+function onIdentityRelChange() {
+  // 只有内容为空或是某个预设时才自动填充
+  const rel = document.getElementById('identity-rel').value;
+  const ta = document.getElementById('identity-desc');
+  const isPreset = ta.value === '' || Object.values(REL_PRESETS).includes(ta.value);
+  if (isPreset && REL_PRESETS[rel]) ta.value = REL_PRESETS[rel];
 }
 
 async function doSaveIdentity() {
   if (!currentAvatar) return;
   const name = document.getElementById('identity-name').value.trim();
-  const desc = document.getElementById('identity-desc').value.trim();
-  const unknown = document.getElementById('identity-unknown').value;
+  const identity_desc = document.getElementById('identity-desc').value.trim();
+  const relationship = document.getElementById('identity-rel').value;
   if (!name) return toast('名称不能为空', 'error');
 
-  // Save name update to avatar
-  const res = await api('PUT', '/api/avatars/' + currentAvatar.id, { name });
+  const res = await api('PUT', '/api/avatars/' + currentAvatar.id, {
+    name, identity_desc, relationship
+  });
   if (!res) return;
 
-  // Save description as a style memory
-  if (desc) {
-    const memContent = `【人设信息】我的名字是${name}。${desc}${unknown === 'honest' ? ' 遇到不知道的事情，我会坦白说不清楚，让对方直接联系本人。' : ''}`;
-    await api('POST', '/api/memories/' + currentAvatar.id, {
-      content: memContent,
-      mem_type: 'style',
-      topic_tags: ['人设', '身份']
-    });
-  }
-
   currentAvatar.name = name;
-  currentAvatar._identity_desc = desc;
+  currentAvatar.identity_desc = identity_desc;
+  currentAvatar.relationship = relationship;
   document.getElementById('sidebar-avatar-name').textContent = name;
   document.getElementById('chat-avatar-name').textContent = name;
   document.getElementById('chat-avatar-icon').textContent = name?.[0] || '?';
@@ -1152,6 +1376,41 @@ async function api(method, path, body) {
   }
 }
 
+// ─── Emoji 渲染 ───────────────────────────────
+const EMOJI_MAP = {
+  // 笑/开心
+  '微笑':'😊','哈哈':'😄','大笑':'😂','嘻嘻':'😄','哈':'😄','笑':'😄',
+  '开心':'😊','高兴':'😊','快乐':'😄','呲牙':'😁','憨笑':'😄','嘿嘿':'😄',
+  // 爱
+  '爱心':'❤️','心':'💕','爱你':'❤️','爱':'❤️','亲':'😘','亲亲':'😘','么么':'😘',
+  // 哭/难过
+  '哭':'😢','泪':'😭','难过':'😔','伤心':'😢','泪目':'😭','呜呜':'😭',
+  // 害羞
+  '害羞':'😳','不好意思':'😅','尴尬':'😅','捂脸':'🤦',
+  // 惊讶
+  '惊讶':'😮','吓到':'😱','震惊':'😱','哇':'😮',
+  // 思考
+  '疑问':'🤔','想想':'🤔','想':'🤔','嗯':'🤔',
+  // 点赞/加油
+  '赞':'👍','加油':'💪','棒':'👍','OK':'👌','好的':'👌','耶':'✌️',
+  // 再见
+  '拜拜':'👋','再见':'👋',
+  // 抱抱
+  '抱抱':'🤗','抱':'🤗',
+  // 其他
+  '鼓掌':'👏','期待':'🤩','困':'😴','饿':'😋','好吃':'😋',
+  '生气':'😠','愤怒':'😤','委屈':'😔','撇嘴':'😒',
+  '汗':'😅','冷汗':'😅','晕':'😵','无语':'😑','翻白眼':'🙄',
+  '坏笑':'😏','得意':'😏','鄙视':'😒',
+};
+
+function renderEmoji(text) {
+  // 把 [xxx] （xxx） (xxx) 【xxx】 括号文字换成 emoji
+  return text.replace(/[\[(\[（【]([^\]\)）】]{1,6})[\])\]）】]/g, (match, inner) => {
+    return EMOJI_MAP[inner.trim()] || match;
+  });
+}
+
 // ─── Utils ───────────────────────────────────
 function v(id) { return document.getElementById(id)?.value || ''; }
 function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
@@ -1160,8 +1419,24 @@ function fmtDate(s) {
   const d = new Date(s.replace(' ','T') + (s.includes('T') ? '' : 'Z'));
   return d.toLocaleDateString('zh-CN', { month:'numeric', day:'numeric', year:'numeric' });
 }
-function relLabel(r) { return {son:'儿子/女儿',boyfriend:'男友/女友',friend:'朋友',custom:'自定义'}[r] || r; }
-function relEmoji(r) { return {son:'👨‍👦',boyfriend:'💑',friend:'🤝',custom:'✨'}[r] || '✨'; }
+function relLabel(r) {
+  return {
+    son:'儿子', daughter:'女儿',
+    boyfriend:'男友', girlfriend:'女友',
+    elder_brother:'哥哥', younger_brother:'弟弟',
+    elder_sister:'姐姐', younger_sister:'妹妹',
+    friend:'朋友', custom:'自定义'
+  }[r] || r;
+}
+function relEmoji(r) {
+  return {
+    son:'👦', daughter:'👧',
+    boyfriend:'👨', girlfriend:'👩',
+    elder_brother:'👨', younger_brother:'👦',
+    elder_sister:'👩', younger_sister:'👧',
+    friend:'🤝', custom:'✨'
+  }[r] || '✨';
+}
 function memTypeLabel(t) { return {opinion:'观点',episode:'回忆',style:'风格',wechat:'微信导入'}[t] || t; }
 function strategyLabel(s) { return {deflect:'回避话题',preset_answer:'预设回答',admit_unknown:'坦白告知'}[s] || s; }
 

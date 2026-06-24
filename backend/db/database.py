@@ -67,13 +67,15 @@ CREATE TABLE IF NOT EXISTS memories (
 );
 
 -- ⑤ 敏感话题预设表
+--   avatar_id = NULL  → 全局话题，适用于所有替身（反诈骗/数据保护）
+--   avatar_id = xxx   → 替身专属话题（已废弃，保留字段兼容旧数据）
 CREATE TABLE IF NOT EXISTS sensitive_topics (
     id               TEXT PRIMARY KEY,
-    avatar_id        TEXT NOT NULL REFERENCES avatars(id),
-    trigger_keywords TEXT NOT NULL,        -- JSON 数组（保留，兼容旧数据）
-    topic_description TEXT DEFAULT '',     -- LLM 生成的意图描述，用于语义匹配
-    strategy         TEXT NOT NULL,        -- preset_answer | deflect | admit_unknown
-    preset_content   TEXT DEFAULT '',      -- strategy=preset_answer 时的回答内容
+    avatar_id        TEXT REFERENCES avatars(id),   -- NULL = 全局
+    trigger_keywords TEXT NOT NULL,                 -- JSON 数组（保留兼容）
+    topic_description TEXT DEFAULT '',              -- LLM 生成的意图描述
+    strategy         TEXT NOT NULL,                 -- preset_answer | deflect | admit_unknown
+    preset_content   TEXT DEFAULT '',               -- strategy=preset_answer 时的回答内容
     created_at       TEXT DEFAULT (datetime('now'))
 );
 
@@ -155,6 +157,8 @@ def _run_migrations(conn: sqlite3.Connection):
         # v0.2: 记忆表增加 bigram 索引字段（存储双字组合，加速检索）
         "ALTER TABLE memories ADD COLUMN bigrams TEXT DEFAULT '{}'",
         # v0.2: 查询扩展缓存表（新建，executescript 里已有 CREATE IF NOT EXISTS，这里仅占位）
+        # v0.4: 替身增加 identity_desc（用户填写的人设描述，与 LLM 生成的 persona_prompt 分离）
+        "ALTER TABLE avatars ADD COLUMN identity_desc TEXT DEFAULT ''",
     ]
     for sql in migrations:
         try:
