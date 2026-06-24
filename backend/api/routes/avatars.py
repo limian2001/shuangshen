@@ -1,0 +1,199 @@
+from __future__ import annotations
+"""
+替身路由：创建 / 查询 / 共享 / 绑定
+"""
+import secrets
+from flask import Blueprint, request, jsonify, g
+
+from backend.db.database import get_db, row_to_dict, rows_to_list
+from backend.utils.auth import require_auth, new_id
+
+avatars_bp = Blueprint("avatars", __name__, url_prefix="/api/avatars")
+
+VALID_RELATIONSHIPS = {"son", "boyfriend", "friend", "custom"}
+
+
+@avatars_bp.get("")
+@require_auth
+def list_avatars():
+    """列出我创建的所有替身"""
+    with get_db() as conn:
+        rows = rows_to_list(conn.execute(
+            """SELECT id, name, relationship, status, share_code, created_at, updated_at
+               FROM avatars WHERE creator_id = ? AND status != 'deleted'
+               ORDER BY created_at DESC""",
+            (g.user_id,),
+        ).fetchall())
+    return jsonify(rows)
+
+
+@avatars_bp.post("")
+@require_auth
+def create_avatar():
+    """创建替身"""
+    data = request.get_json() or {}
+    name = (data.get("name") or "").strip()
+    relationship = data.get("relationship", "custom")
+
+    if not name:
+        return jsonify({"error": "name 不能为空"}), 400
+    if relationship not in VALID_RELATIONSHIPS:
+        return jsonify({"error": f"relationship 须为 {VALID_RELATIONSHIPS} 之一"}), 400
+
+    aid = new_id()
+    share_code = secrets.token_urlsafe(8)  # 8位随机共享码
+
+    with get_db() as conn:
+        conn.execute(
+            """INSERT INTO avatars (id, creator_id, name, relationship, share_code)
+               VALUES (?, ?, ?, ?, ?)""",
+            (aid, g.user_id, name, relationship, share_code),
+        )
+
+    return jsonify({
+        "id": aid,
+        "name": name,
+        "relationship": relationship,
+        "share_code": share_code,
+        "status": "active",
+    }), 201
+
+
+@avatars_bp.get("/<avatar_id>")
+@require_auth
+def get_avatar(avatar_id):
+    """获取替身详情（创建者或绑定的接收者可访问）"""
+    with get_db() as conn:
+        avatar = row_to_dict(conn.execute(
+            "SELECT * FROM avatars WHERE id = ?", (avatar_id,)
+        ).fetchone())
+
+    if not avatar:
+        return jsonify({"error": "替身不存在"}), 404
+
+    # 权限：创建者 or 接收者
+    if not _can_access(avatar_id, g.user_id, avatar):
+        return jsonify({"error": "无权访问"}), 403
+
+    # 不暴露 persona_prompt 给接收者
+    if avatar["creator_id"] != g.user_id:
+        avatar.pop("persona_prompt", None)
+        avatar.pop("share_code", None)
+
+    return jsonify(avatar)
+
+
+@avatars_bp.put("/<avatar_id>")
+@require_auth
+def update_avatar(avatar_id):
+    """更新替身（仅创建者）"""
+    with get_db() as conn:
+        avatar = row_to_dict(conn.execute(
+            "SELECT * FROM avatars WHERE id = ? AND creator_id = ?",
+            (avatar_id, g.user_id),
+        ).fetchone())
+
+    if not avatar:
+        return jsonify({"error": "替身不存在或无权限"}), 404
+
+    data = request.get_json() or {}
+    fields = []
+    values = []
+    for field in ("name", "status"):
+        if field in data:
+            fields.append(f"{field} = ?")
+            values.append(data[field])
+
+    if not fields:
+        return jsonify({"error": "没有可更新的字段"}), 400
+
+    fields.append("updated_at = datetime('now')")
+    values.append(avatar_id)
+
+    with get_db() as conn:
+        conn.execute(
+            f"UPDATE avatars SET {', '.join(fields)} WHERE id = ?", values
+        )
+
+    return jsonify({"ok": True})
+
+
+@avatars_bp.post("/<avatar_id>/share")
+@require_auth
+def get_share_code(avatar_id):
+    """获取/重置共享码"""
+    with get_db() as conn:
+        avatar = row_to_dict(conn.execute(
+            "SELECT share_code FROM avatars WHERE id = ? AND creator_id = ?",
+            (avatar_id, g.user_id),
+        ).fetchone())
+
+    if not avatar:
+        return jsonify({"error": "替身不存在或无权限"}), 404
+
+    return jsonify({
+        "share_code": avatar["share_code"],
+        "share_url": f"shuangshen://join/{avatar['share_code']}",
+    })
+
+
+@avatars_bp.post("/join/<share_code>")
+@require_auth
+def join_avatar(share_code):
+    """接收者通过共享码绑定替身"""
+    with get_db() as conn:
+        avatar = row_to_dict(conn.execute(
+            "SELECT * FROM avatars WHERE share_code = ? AND status = 'active'",
+            (share_code,),
+        ).fetchone())
+
+    if not avatar:
+        return jsonify({"error": "无效的共享码"}), 404
+
+    if avatar["creator_id"] == g.user_id:
+        return jsonify({"error": "不能绑定自己创建的替身"}), 400
+
+    bind_id = new_id()
+    try:
+        with get_db() as conn:
+            conn.execute(
+                "INSERT INTO avatar_receivers (id, avatar_id, receiver_id) VALUES (?, ?, ?)",
+                (bind_id, avatar["id"], g.user_id),
+            )
+    except Exception as e:
+        if "UNIQUE" in str(e):
+            return jsonify({"message": "已绑定", "avatar_id": avatar["id"]}), 200
+        return jsonify({"error": str(e)}), 500
+
+    return jsonify({
+        "message": "绑定成功",
+        "avatar_id": avatar["id"],
+        "avatar_name": avatar["name"],
+    }), 201
+
+
+@avatars_bp.get("/received")
+@require_auth
+def received_avatars():
+    """接收者：查看绑定的替身列表"""
+    with get_db() as conn:
+        rows = rows_to_list(conn.execute(
+            """SELECT a.id, a.name, a.relationship, a.status, ar.bound_at
+               FROM avatars a
+               JOIN avatar_receivers ar ON a.id = ar.avatar_id
+               WHERE ar.receiver_id = ? AND a.status = 'active'""",
+            (g.user_id,),
+        ).fetchall())
+    return jsonify(rows)
+
+
+def _can_access(avatar_id: str, user_id: str, avatar: dict) -> bool:
+    """检查用户是否有权访问某替身（创建者 or 接收者）"""
+    if avatar["creator_id"] == user_id:
+        return True
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT 1 FROM avatar_receivers WHERE avatar_id = ? AND receiver_id = ?",
+            (avatar_id, user_id),
+        ).fetchone()
+    return row is not None

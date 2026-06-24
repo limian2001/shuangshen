@@ -1,0 +1,19 @@
+# 环境变量（含密钥，绝不能上传）
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+# 数据与本地数据库（按需调整）
+data/
+*.db
+*.sqlite3
+
+# macOS
+.DS_Store
+# IDE
+.idea/
+.vscode/
