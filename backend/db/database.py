@@ -127,12 +127,24 @@ CREATE TABLE IF NOT EXISTS raw_uploads (
     created_at      TEXT DEFAULT (datetime('now'))
 );
 
+-- ⑩ 平台身份联邦表（微信/WhatsApp/Facebook 等第三方登录）
+CREATE TABLE IF NOT EXISTS user_identities (
+    id          TEXT PRIMARY KEY,
+    user_id     TEXT NOT NULL REFERENCES users(id),
+    platform    TEXT NOT NULL,     -- wechat | whatsapp | facebook | telegram
+    external_id TEXT NOT NULL,     -- 各平台原始 ID（openid、手机号、fb_user_id）
+    extra       TEXT DEFAULT '{}', -- JSON，可存 session_key 等平台额外信息
+    created_at  TEXT DEFAULT (datetime('now')),
+    UNIQUE(platform, external_id)
+);
+
 -- 索引
-CREATE INDEX IF NOT EXISTS idx_memories_avatar  ON memories(avatar_id);
-CREATE INDEX IF NOT EXISTS idx_chat_avatar      ON chat_messages(avatar_id, receiver_id);
-CREATE INDEX IF NOT EXISTS idx_topics_avatar    ON sensitive_topics(avatar_id);
-CREATE INDEX IF NOT EXISTS idx_raw_uploads_avatar ON raw_uploads(avatar_id);
+CREATE INDEX IF NOT EXISTS idx_memories_avatar      ON memories(avatar_id);
+CREATE INDEX IF NOT EXISTS idx_chat_avatar          ON chat_messages(avatar_id, receiver_id);
+CREATE INDEX IF NOT EXISTS idx_topics_avatar        ON sensitive_topics(avatar_id);
+CREATE INDEX IF NOT EXISTS idx_raw_uploads_avatar   ON raw_uploads(avatar_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_raw_uploads_hash ON raw_uploads(avatar_id, content_hash);
+CREATE INDEX IF NOT EXISTS idx_user_identities_user ON user_identities(user_id);
 """
 
 
@@ -187,6 +199,17 @@ def _run_migrations(conn: sqlite3.Connection):
         "ALTER TABLE ingest_jobs ADD COLUMN date_end TEXT DEFAULT ''",
         # v0.5: 记忆对应的原始聊天日期（与 created_at 区分；NULL 表示无聊天来源）
         "ALTER TABLE memories ADD COLUMN chat_date TEXT DEFAULT NULL",
+        # v0.7: 平台身份联邦表（对已存在的数据库补建）
+        """CREATE TABLE IF NOT EXISTS user_identities (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL REFERENCES users(id),
+            platform TEXT NOT NULL,
+            external_id TEXT NOT NULL,
+            extra TEXT DEFAULT '{}',
+            created_at TEXT DEFAULT (datetime('now')),
+            UNIQUE(platform, external_id)
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_user_identities_user ON user_identities(user_id)",
     ]
     for sql in migrations:
         try:

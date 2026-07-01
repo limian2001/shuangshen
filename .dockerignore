@@ -1,0 +1,11 @@
+# 不打包进镜像的文件
+.env
+data/
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+.git/
+.gitignore
+scripts/
+*.md

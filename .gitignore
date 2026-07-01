@@ -17,3 +17,10 @@ data/
 # IDE
 .idea/
 .vscode/
+
+# 上传的原始文件（用户数据，不入库）
+data/uploads/
+
+# 日志
+*.log
+logs/

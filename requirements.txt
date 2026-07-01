@@ -3,3 +3,5 @@ flask-cors
 python-dotenv
 requests
 chromadb>=0.5
+PyJWT>=2.8
+gunicorn>=21.0

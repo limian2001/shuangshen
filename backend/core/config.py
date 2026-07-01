@@ -49,6 +49,10 @@ class Config:
     # Chroma 向量库持久化目录
     CHROMA_PATH: Path = BASE_DIR / os.getenv("CHROMA_PATH", "data/chroma")
 
+    # 微信小程序
+    WECHAT_APPID: str = os.getenv("WECHAT_APPID", "")
+    WECHAT_SECRET: str = os.getenv("WECHAT_SECRET", "")
+
     # JWT
     JWT_SECRET: str = os.getenv("JWT_SECRET", "jwt-secret")
     JWT_EXPIRE_HOURS: int = int(os.getenv("JWT_EXPIRE_HOURS", 72))
