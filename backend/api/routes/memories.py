@@ -33,7 +33,8 @@ def add(avatar_id):
         return jsonify({"error": "mem_type 须为 episode | opinion | style"}), 400
 
     topic_tags = data.get("topic_tags", [])
-    result = add_memory(avatar_id, content, mem_type, topic_tags)
+    # 用户手动添加的记忆 priority=1，RAG 检索时权重 ×1.5
+    result = add_memory(avatar_id, content, mem_type, topic_tags, priority=1)
     return jsonify(result), 201
 
 

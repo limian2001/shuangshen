@@ -164,6 +164,16 @@ select { cursor: pointer; }
 .upload-zone p { font-size: 13px; color: var(--text-2); }
 .upload-zone .hint { font-size: 11px; color: var(--text-3); margin-top: 4px; }
 
+/* ── File List (multi-upload) ── */
+.file-list { margin-top: 12px; display: flex; flex-direction: column; gap: 6px; }
+.file-item { display: flex; align-items: center; gap: 8px; background: var(--bg); border: 1px solid var(--border-md); border-radius: var(--radius); padding: 8px 12px; }
+.file-item-name { flex: 1; font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-item-size { font-size: 12px; color: var(--text-3); white-space: nowrap; }
+.file-item-type { font-size: 10px; padding: 1px 6px; border-radius: 3px; font-weight: 600; background: var(--purple-light); color: var(--purple); }
+.file-item-type.html { background: #FFF3E0; color: #E65100; }
+.file-item-del { width: 20px; height: 20px; border: none; background: transparent; cursor: pointer; color: var(--text-3); font-size: 16px; line-height: 1; padding: 0; border-radius: 3px; }
+.file-item-del:hover { color: var(--red); background: var(--red-light); }
+
 /* ── Misc ── */
 .tag { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 4px; font-weight: 500; }
 .share-code-box { display: flex; align-items: center; gap: 8px; background: var(--bg); border: 1px solid var(--border-md); border-radius: 8px; padding: 10px 14px; margin-top: 10px; }
@@ -481,27 +491,25 @@ select { cursor: pointer; }
         <!-- Tab: 粘贴（默认显示） -->
         <div id="ingest-tab-paste">
           <div style="background:var(--bg);border-radius:var(--radius);padding:12px 14px;margin-bottom:14px;font-size:12px;color:var(--text-2);line-height:1.9">
-            <strong style="color:var(--text)">支持以下任意格式，直接粘贴进来即可：</strong><br>
-            <span style="color:var(--text-3)">① 微信聊天记录（手机 → 聊天 → 右上角「…」→「更多」→「邮件聊天记录」，复制邮件内容）</span><br>
-            <span style="color:var(--text-3)">② 简单格式：每行写「名字: 内容」，如「小王: 今天好累啊」</span><br>
-            <span style="color:var(--text-3)">③ 任意文本段落，系统会尽力解析</span>
+            <strong style="color:var(--text)">推荐方式：微信长按多选消息 → 复制 → 粘贴到这里</strong><br>
+            <span style="color:var(--teal);font-weight:500">✓ 此方式包含完整日期，可追踪哪段时间的记录已导入</span><br>
+            <span style="color:var(--text-3)">也支持：微信邮件导出格式 · 「名字: 内容」格式 · 任意文本</span>
           </div>
           <!-- 步骤 1：粘贴内容 -->
           <div class="field">
             <label>聊天记录内容</label>
-            <textarea id="paste-content" style="min-height:200px;font-size:12px;font-family:monospace;line-height:1.6" placeholder="把聊天记录粘贴到这里…
+            <textarea id="paste-content" style="min-height:200px;font-size:12px;font-family:monospace;line-height:1.6" placeholder="把微信聊天记录粘贴到这里…
 
-支持格式示例：
-2024-01-01 09:00 小王
+【推荐】手机微信 → 长按消息 → 多选 → 复制，格式如：
+小王
+2024年1月1日 09:00
 妈你吃饭了没
 
-2024-01-01 09:01 妈妈
+妈妈
+2024年1月1日 09:01
 吃了，你呢
 
-—— 或者 ——
-
-小王: 最近项目有点忙，过年才能回来
-妈妈: 注意身体啊"></textarea>
+一次可以选 100+ 条，支持分批粘贴导入"></textarea>
           </div>
           <button class="btn btn-secondary" onclick="detectSenders('paste')">
             🔍 检测发言人
@@ -510,7 +518,7 @@ select { cursor: pointer; }
           <!-- 步骤 2：选择「我是谁」（检测后显示） -->
           <div id="paste-sender-step" style="display:none;margin-top:16px;padding:14px;background:var(--bg);border-radius:var(--radius);border:1px solid var(--border-md)">
             <div style="font-size:13px;font-weight:600;margin-bottom:4px">共检测到 <span id="paste-total-msg"></span> 条消息，请选择哪个是「你」（替身）：</div>
-            <div style="font-size:11px;color:var(--text-3);margin-bottom:12px">系统会学习你说话的风格，所以必须选对 😊</div>
+            <div style="font-size:11px;color:var(--text-3);margin-bottom:12px">可以选多个（如有多个昵称），未选中的默认视为对方</div>
             <div id="paste-sender-cards" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px"></div>
             <button class="btn btn-primary" id="paste-confirm-btn" onclick="doConfirmedImport('paste')" disabled>
               确认并导入
@@ -522,25 +530,23 @@ select { cursor: pointer; }
         <!-- Tab: 上传文件（默认隐藏） -->
         <div id="ingest-tab-upload" style="display:none">
           <div style="background:var(--bg);border-radius:var(--radius);padding:12px 14px;margin-bottom:14px;font-size:12px;color:var(--text-2);line-height:1.9">
-            <strong style="color:var(--text)">获取微信 .txt 文件的方法：</strong><br>
-            <span style="color:var(--text-3)">① 手机微信 → 进入聊天 → 右上角「…」→「更多」→「邮件聊天记录」→ 保存附件 .txt</span><br>
-            <span style="color:var(--text-3)">② PC 微信 → 聊天窗口右上角「…」→「备份与迁移」→ 第三方工具导出为 .txt</span><br>
-            <span style="color:var(--text-3)">③ 也支持自己整理的纯文本文件（UTF-8 或 GBK 编码）</span>
+            <strong style="color:var(--text)">支持的文件类型：</strong><br>
+            <span style="color:var(--text-3)">① 手机微信「邮件聊天记录」导出的 <strong>.txt</strong>（单次100条，可多批次同时上传）</span><br>
+            <span style="color:var(--text-3)">② PC 微信 Windows 版「导出聊天记录」导出的 <strong>.html</strong></span><br>
+            <span style="color:var(--text-3)">③ 多个文件一起上传，系统自动合并并去重</span>
           </div>
-          <!-- 步骤 1：选择文件 -->
+          <!-- 步骤 1：选择文件（支持多选） -->
           <div class="upload-zone" id="upload-zone" onclick="document.getElementById('file-input').click()" ondragover="handleDrag(event)" ondrop="handleDrop(event)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0018 9h-1.26A8 8 0 103 16.3"/></svg>
-            <p>点击或拖拽上传 .txt 文件</p>
-            <div class="hint">支持 UTF-8 / GBK 编码，单次上限 50 万字</div>
+            <p>点击或拖拽上传文件（可多选）</p>
+            <div class="hint">支持 .txt 和 .html，UTF-8 / GBK 编码，可同时上传多批次文件</div>
           </div>
-          <input type="file" id="file-input" accept=".txt" style="display:none" onchange="handleFileSelect(event)">
+          <input type="file" id="file-input" accept=".txt,.html,.htm" multiple style="display:none" onchange="handleFileSelect(event)">
 
-          <div id="upload-info" style="display:none;margin-top:14px">
-            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--purple)" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-              <span id="upload-filename" style="font-size:13px;font-weight:500"></span>
-              <span id="upload-filesize" style="font-size:12px;color:var(--text-3)"></span>
-            </div>
+          <!-- 已选文件列表 -->
+          <div id="upload-file-list" class="file-list" style="display:none"></div>
+
+          <div id="upload-info" style="display:none;margin-top:12px">
             <button class="btn btn-secondary" onclick="detectSenders('upload')">
               🔍 检测发言人
             </button>
@@ -549,7 +555,7 @@ select { cursor: pointer; }
           <!-- 步骤 2：选择「我是谁」 -->
           <div id="upload-sender-step" style="display:none;margin-top:16px;padding:14px;background:var(--bg);border-radius:var(--radius);border:1px solid var(--border-md)">
             <div style="font-size:13px;font-weight:600;margin-bottom:4px">共检测到 <span id="upload-total-msg"></span> 条消息，请选择哪个是「你」（替身）：</div>
-            <div style="font-size:11px;color:var(--text-3);margin-bottom:12px">系统会学习你说话的风格，所以必须选对 😊</div>
+            <div style="font-size:11px;color:var(--text-3);margin-bottom:12px">可以选多个（如有多个昵称），未选中的默认视为对方</div>
             <div id="upload-sender-cards" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px"></div>
             <button class="btn btn-primary" id="upload-confirm-btn" onclick="doConfirmedImport('upload')" disabled>
               确认并导入
@@ -563,6 +569,21 @@ select { cursor: pointer; }
           <div id="upload-result" style="display:none"></div>
         </div><!-- /ingest-tab-upload -->
 
+      </div>
+
+      <!-- 重新解析区域（有原始记录时显示） -->
+      <div id="reparse-card" class="card" style="margin-top:14px;display:none">
+        <div class="card-title">重新解析</div>
+        <div style="font-size:13px;color:var(--text-2);margin-bottom:10px">
+          已保存 <span id="reparse-file-count" style="font-weight:600;color:var(--teal)">0</span> 份原始记录
+          （<span id="reparse-char-count"></span>字）。
+          算法升级或想更新风格档案时，无需重新上传文件，直接点击重新解析即可。
+        </div>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <button class="btn btn-secondary" onclick="doReparse()">🔄 重新解析已有记录</button>
+          <div id="reparse-status" style="font-size:12px;color:var(--text-3)"></div>
+        </div>
+        <div id="reparse-result" style="display:none;margin-top:10px"></div>
       </div>
 
       <div class="card" style="margin-top:14px">
@@ -645,7 +666,7 @@ let token = localStorage.getItem('ss_token');
 let currentUser = JSON.parse(localStorage.getItem('ss_user') || 'null');
 let currentAvatar = null;
 let memPage = 1;
-let uploadFile = null;
+let uploadFiles = [];   // 支持多文件
 
 // 各关系类型的默认人设描述
 const REL_PRESETS = {
@@ -1000,7 +1021,7 @@ async function loadMemories(append) {
       <span class="mem-type-badge mem-${m.mem_type}">${memTypeLabel(m.mem_type)}</span>
       <div class="mem-content">
         <div>${esc(m.content)}</div>
-        <div class="mem-date">${fmtDate(m.created_at)} ${m.topic_tags && JSON.parse(m.topic_tags||'[]').length ? '· ' + JSON.parse(m.topic_tags).join(', ') : ''}</div>
+        <div class="mem-date">${m.chat_date ? _fmtDateRange(m.chat_date) + ' <span title="聊天原始日期" style="color:var(--teal);opacity:.7">·聊天</span>' : fmtDate(m.created_at) + ' <span title="导入日期" style="opacity:.5">·导入</span>'} ${m.topic_tags && JSON.parse(m.topic_tags||'[]').length ? '&nbsp;· ' + JSON.parse(m.topic_tags).join(', ') : ''}</div>
       </div>
     </div>`).join('');
 
@@ -1075,8 +1096,8 @@ function togglePresetContent() {
 }
 
 // ─── Ingest 发言人检测 ───────────────────────
-// 存储每个 tab 当前选中的「我」
-const _ingestState = { paste: { myName: null }, upload: { myName: null } };
+// myNames 为数组，支持多选（同一人有多个昵称时全选）
+const _ingestState = { paste: { myNames: [] }, upload: { myNames: [] } };
 
 async function detectSenders(tab) {
   if (!currentAvatar) return;
@@ -1087,9 +1108,9 @@ async function detectSenders(tab) {
     if (!text) return toast('请先粘贴聊天记录', 'error');
     res = await api('POST', '/api/ingest/' + currentAvatar.id + '/detect', { text });
   } else {
-    if (!uploadFile) return toast('请先选择文件', 'error');
+    if (!uploadFiles.length) return toast('请先选择文件', 'error');
     const fd = new FormData();
-    fd.append('file', uploadFile);
+    uploadFiles.forEach(f => fd.append('file', f));
     try {
       const r = await fetch(API + '/api/ingest/' + currentAvatar.id + '/detect', {
         method: 'POST',
@@ -1103,7 +1124,7 @@ async function detectSenders(tab) {
 
   if (!res || !res.senders) return;
 
-  _ingestState[tab].myName = null;
+  _ingestState[tab].myNames = [];
   document.getElementById(`${tab}-confirm-btn`).disabled = true;
   document.getElementById(`${tab}-total-msg`).textContent = res.total_messages;
 
@@ -1114,38 +1135,47 @@ async function detectSenders(tab) {
     cardsEl.innerHTML = res.senders.map(s => `
       <div class="sender-card ${s.is_me_guess ? 'guessed' : ''}"
            id="sc-${tab}-${esc(s.name)}"
-           onclick="selectSender('${tab}','${esc(s.name)}')">
+           onclick="toggleSender('${tab}','${esc(s.name)}')">
         <div style="font-size:14px;font-weight:600">${esc(s.name)}</div>
         <div style="font-size:11px;color:var(--text-3);margin-top:3px">${s.count} 条消息</div>
         ${s.is_me_guess ? '<div style="font-size:10px;color:var(--purple);margin-top:3px">系统猜测</div>' : ''}
       </div>`).join('');
-    // 自动高亮系统猜测的
+    // 自动勾选系统猜测的
     const guessed = res.senders.find(s => s.is_me_guess);
-    if (guessed) selectSender(tab, guessed.name);
+    if (guessed) toggleSender(tab, guessed.name);
   }
 
   document.getElementById(`${tab}-sender-step`).style.display = 'block';
 }
 
-function selectSender(tab, name) {
-  _ingestState[tab].myName = name;
-  // 更新高亮
+function toggleSender(tab, name) {
+  const state = _ingestState[tab];
+  const idx = state.myNames.indexOf(name);
+  if (idx === -1) {
+    state.myNames.push(name);
+  } else {
+    state.myNames.splice(idx, 1);
+  }
+  // 更新卡片高亮
   document.querySelectorAll(`[id^="sc-${tab}-"]`).forEach(c => c.classList.remove('selected'));
-  const card = document.getElementById(`sc-${tab}-${name}`);
-  if (card) card.classList.add('selected');
-  document.getElementById(`${tab}-confirm-btn`).disabled = false;
+  state.myNames.forEach(n => {
+    const card = document.getElementById(`sc-${tab}-${n}`);
+    if (card) card.classList.add('selected');
+  });
+  document.getElementById(`${tab}-confirm-btn`).disabled = state.myNames.length === 0;
 }
 
 async function doConfirmedImport(tab) {
-  const myName = _ingestState[tab].myName;
-  if (!myName) return toast('请先选择哪个是你', 'error');
+  const myNames = _ingestState[tab].myNames;
+  if (!myNames.length) return toast('请先选择哪个是你', 'error');
+  const myNamesStr = myNames.join(',');
 
   if (tab === 'paste') {
     const text = document.getElementById('paste-content').value.trim();
     if (!text) return toast('聊天内容不能为空', 'error');
-    await _runPasteImport(text, myName);
+    await _runPasteImport(text, myNamesStr);
   } else {
-    await _runUploadImport(myName);
+    await _runUploadImport(myNamesStr);
   }
 }
 
@@ -1194,23 +1224,66 @@ function handleDrag(e) { e.preventDefault(); document.getElementById('upload-zon
 function handleDrop(e) {
   e.preventDefault();
   document.getElementById('upload-zone').classList.remove('drag');
-  const file = e.dataTransfer.files[0];
-  if (file) setUploadFile(file);
+  const files = e.dataTransfer.files;
+  if (files.length) addUploadFiles(Array.from(files));
 }
-function handleFileSelect(e) { if (e.target.files[0]) setUploadFile(e.target.files[0]); }
-function setUploadFile(file) {
-  if (!file.name.endsWith('.txt')) return toast('请选择 .txt 格式文件', 'error');
-  uploadFile = file;
-  document.getElementById('upload-filename').textContent = file.name;
-  document.getElementById('upload-filesize').textContent = (file.size / 1024).toFixed(1) + ' KB';
-  document.getElementById('upload-info').style.display = 'block';
+function handleFileSelect(e) {
+  if (e.target.files.length) addUploadFiles(Array.from(e.target.files));
+  e.target.value = '';   // 允许重复选同一文件
+}
+
+function addUploadFiles(newFiles) {
+  const allowed = ['.txt', '.html', '.htm'];
+  const invalid = newFiles.filter(f => !allowed.some(ext => f.name.toLowerCase().endsWith(ext)));
+  if (invalid.length) {
+    toast('仅支持 .txt 和 .html 文件', 'error');
+    return;
+  }
+  // 避免重复加入同名文件
+  const existingNames = new Set(uploadFiles.map(f => f.name));
+  const added = newFiles.filter(f => !existingNames.has(f.name));
+  uploadFiles.push(...added);
+  _renderFileList();
   document.getElementById('upload-result').style.display = 'none';
+  document.getElementById('upload-sender-step').style.display = 'none';
+}
+
+function removeUploadFile(name) {
+  uploadFiles = uploadFiles.filter(f => f.name !== name);
+  _renderFileList();
+  if (!uploadFiles.length) {
+    document.getElementById('upload-sender-step').style.display = 'none';
+    document.getElementById('upload-result').style.display = 'none';
+  }
+}
+
+function _renderFileList() {
+  const listEl = document.getElementById('upload-file-list');
+  const infoEl = document.getElementById('upload-info');
+  if (!uploadFiles.length) {
+    listEl.style.display = 'none';
+    infoEl.style.display = 'none';
+    return;
+  }
+  listEl.style.display = 'flex';
+  infoEl.style.display = 'block';
+  listEl.innerHTML = uploadFiles.map(f => {
+    const isHtml = f.name.toLowerCase().endsWith('.html') || f.name.toLowerCase().endsWith('.htm');
+    const typeLabel = isHtml ? 'HTML' : 'TXT';
+    const kb = (f.size / 1024).toFixed(1);
+    return `<div class="file-item">
+      <span class="file-item-type${isHtml ? ' html' : ''}">${typeLabel}</span>
+      <span class="file-item-name" title="${esc(f.name)}">${esc(f.name)}</span>
+      <span class="file-item-size">${kb} KB</span>
+      <button class="file-item-del" onclick="removeUploadFile('${esc(f.name)}')" title="移除">×</button>
+    </div>`;
+  }).join('');
 }
 
 async function _runUploadImport(myName) {
-  if (!uploadFile || !currentAvatar) return;
+  if (!uploadFiles.length || !currentAvatar) return;
   const fd = new FormData();
-  fd.append('file', uploadFile);
+  uploadFiles.forEach(f => fd.append('file', f));
   if (myName) fd.append('my_names', myName);
 
   document.getElementById('upload-sender-step').style.display = 'none';
@@ -1238,7 +1311,8 @@ async function _runUploadImport(myName) {
     if (res.stats) {
       resultEl.innerHTML = _buildImportResult(res);
       toast('导入成功，共 ' + res.stats.total_imported + ' 条记忆', 'success');
-      uploadFile = null;
+      uploadFiles = [];
+      _renderFileList();
       loadIngestJobs();
     } else {
       resultEl.innerHTML = `<div style="color:var(--red);font-size:13px">错误：${res.error || '未知错误'}</div>`;
@@ -1253,38 +1327,115 @@ async function _runUploadImport(myName) {
 // 旧函数保留为空
 function doUpload() { toast('请先点击「检测发言人」', 'error'); }
 
+// 日期字符串美化：兼容 "2020年11月23日 19:47" 和 "2024-01-01 09:00" 两种格式
+function _fmtDateRange(ts) {
+  if (!ts) return '';
+  // 中文格式：取到"日"即可
+  const zhMatch = ts.match(/(\d{4}年\d{1,2}月\d{1,2}日)/);
+  if (zhMatch) return zhMatch[1];
+  // ISO 格式：取前10位
+  return ts.slice(0, 10);
+}
+
 // 导入结果统一渲染
 function _buildImportResult(res) {
   const s = res.stats;
+  const dupLine = s.duplicates_skipped > 0
+    ? `<div class="stat" style="color:var(--text-3)">跳过重复内容：<span style="color:var(--text-3)">${s.duplicates_skipped}</span> 条</div>`
+    : '';
+  const errLine = res.file_errors && res.file_errors.length > 0
+    ? `<div style="margin-top:6px;font-size:11px;color:var(--red)">部分文件处理失败：${res.file_errors.map(e => esc(e)).join('；')}</div>`
+    : '';
   return `<div class="ingest-result">
     <div style="font-weight:600;margin-bottom:8px">✅ 导入完成！</div>
     <div class="stat">共解析消息：<span>${s.total_messages}</span> 条</div>
     <div class="stat">识别「我」的消息：<span>${s.my_messages}</span> 条</div>
-    <div class="stat">风格样本：<span>${s.style_samples_imported}</span> 条</div>
+    <div class="stat">风格样本导入：<span>${s.style_samples_imported}</span> 条</div>
     <div class="stat">AI 提取结构化记忆：<span>${s.semantic_memories_extracted}</span> 条</div>
     <div class="stat">合计导入记忆库：<span>${s.total_imported}</span> 条</div>
-    ${s.date_range?.start ? `<div class="stat">时间范围：<span>${s.date_range.start.slice(0,10)} ~ ${s.date_range.end?.slice(0,10)||'-'}</span></div>` : ''}
+    ${dupLine}
+    ${s.date_range?.start ? `<div class="stat" style="background:var(--teal-light);border-radius:6px;padding:6px 10px;margin-top:6px">📅 聊天时间范围：<span style="color:var(--teal);font-weight:600">${_fmtDateRange(s.date_range.start)} ~ ${_fmtDateRange(s.date_range.end)||'—'}</span></div>` : ''}
     ${res.persona_rebuilt ? '<div style="margin-top:8px;font-size:12px;color:var(--teal)">✓ 人格 Prompt 已自动更新</div>' : ''}
+    ${errLine}
   </div>`;
+}
+
+async function doReparse() {
+  if (!currentAvatar) return;
+  const statusEl = document.getElementById('reparse-status');
+  const resultEl = document.getElementById('reparse-result');
+  const btn = document.querySelector('#reparse-card .btn');
+
+  btn.disabled = true;
+  statusEl.textContent = '重新解析中，LLM 分析约需 20-30 秒…';
+  resultEl.style.display = 'none';
+
+  try {
+    const resp = await fetch(API + '/api/ingest/' + currentAvatar.id + '/reparse', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    const res = await resp.json();
+    btn.disabled = false;
+    statusEl.textContent = '';
+
+    if (res.stats) {
+      resultEl.style.display = 'block';
+      resultEl.innerHTML = _buildImportResult(res);
+      const extra = res.style_profile_updated
+        ? '<div style="margin-top:6px;font-size:12px;color:var(--purple)">✓ 风格档案已更新</div>' : '';
+      resultEl.innerHTML += extra;
+      toast('重新解析完成', 'success');
+      loadIngestJobs();
+    } else {
+      statusEl.style.color = 'var(--red)';
+      statusEl.textContent = res.error || '重新解析失败';
+    }
+  } catch (e) {
+    btn.disabled = false;
+    statusEl.style.color = 'var(--red)';
+    statusEl.textContent = '网络错误：' + e.message;
+  }
 }
 
 async function loadIngestJobs() {
   if (!currentAvatar) return;
+
+  // 同时加载原始记录数量，决定是否显示重新解析卡片
+  const rawInfo = await api('GET', '/api/ingest/' + currentAvatar.id + '/raw_count');
+  const reparseCard = document.getElementById('reparse-card');
+  if (rawInfo && rawInfo.count > 0) {
+    document.getElementById('reparse-file-count').textContent = rawInfo.count;
+    document.getElementById('reparse-char-count').textContent =
+      rawInfo.total_chars > 10000
+        ? Math.round(rawInfo.total_chars / 10000) + '万'
+        : rawInfo.total_chars;
+    reparseCard.style.display = 'block';
+  } else {
+    reparseCard.style.display = 'none';
+  }
+
   const list = await api('GET', '/api/ingest/' + currentAvatar.id + '/jobs');
   const el = document.getElementById('ingest-jobs-list');
   if (!list || list.length === 0) {
     el.innerHTML = '<div class="empty"><p>暂无导入记录</p></div>';
     return;
   }
-  el.innerHTML = list.map(j => `
-    <div class="memory-item">
+  el.innerHTML = list.map(j => {
+    const dateRangeHtml = (j.date_start && j.date_end)
+      ? `<div style="margin-top:4px;font-size:12px;color:var(--teal);background:var(--teal-light);display:inline-block;padding:2px 8px;border-radius:4px">📅 ${_fmtDateRange(j.date_start)} ~ ${_fmtDateRange(j.date_end)}</div>`
+      : '';
+    return `<div class="memory-item">
       <span class="mem-type-badge" style="background:${j.status==='done'?'var(--teal-light)':j.status==='failed'?'var(--red-light)':'var(--amber-light)'};color:${j.status==='done'?'var(--teal)':j.status==='failed'?'var(--red)':'var(--amber)'}">${j.status==='done'?'完成':j.status==='failed'?'失败':'处理中'}</span>
       <div class="mem-content">
         <div style="font-size:13px">${esc(j.filename)}</div>
         <div class="mem-date">${fmtDate(j.created_at)} · 解析 ${j.total_msgs} 条 · 导入 ${j.imported} 条</div>
+        ${dateRangeHtml}
         ${j.error_msg ? `<div style="color:var(--red);font-size:12px;margin-top:2px">${esc(j.error_msg)}</div>` : ''}
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
 // ─── Share ───────────────────────────────────

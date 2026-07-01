@@ -1,16 +1,17 @@
 from __future__ import annotations
 """
-人格构建服务 v0.3
+人格构建服务 v0.5
 
 核心变化：
-- build_system_prompt 接收 recent_history + topic_hints
+- build_system_prompt 注入 style_profile、回复字数规则、时间情境
 - 新增重复话题检测：用户多次问同一话题时，注入情绪感知指令
-- 人设信息作为每次回答的兜底，LLM 最终决策回复方式
+- wechat/style 类型不再出现在 RAG 记忆块，由 style_profile 覆盖
 """
 import json
 import re
+import datetime
 from backend.db.database import get_db, row_to_dict
-from backend.services.memory_store import search_memories, get_recent_memories
+from backend.services.memory_store import search_memories, get_recent_memories, get_style_samples
 
 
 # ─────────────────────────────────────────────
@@ -90,6 +91,60 @@ RELATIONSHIP_TEMPLATES = {
 }
 
 
+def _time_context_hint() -> str:
+    """
+    根据服务器当前时间生成时间情境提示，注入 System Prompt。
+
+    作用：
+    - 让替身知道"现在几点"，回复符合生活场景
+    - 对「你在干嘛」类闲聊给出应对框架，避免编造具体事件
+    - 凌晨/深夜时自然关心对方为什么还没睡
+    """
+    now = datetime.datetime.now()
+    hour = now.hour
+    weekday_cn = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
+    day = weekday_cn[now.weekday()]
+
+    if 0 <= hour < 6:
+        period, activity, care = (
+            "凌晨",
+            "这个时间正常应该在睡觉",
+            "对方还在发消息，可以关心他/她为什么还没睡，语气温柔",
+        )
+    elif 6 <= hour < 9:
+        period, activity, care = "早上", "刚起床，可能在洗漱或吃早饭", ""
+    elif 9 <= hour < 12:
+        period, activity, care = "上午", "工作/学习时间，可能比较忙", ""
+    elif 12 <= hour < 14:
+        period, activity, care = "中午", "午饭时间或午休", ""
+    elif 14 <= hour < 18:
+        period, activity, care = "下午", "下午上班/上课", ""
+    elif 18 <= hour < 20:
+        period, activity, care = "傍晚", "下班放学，可能在路上或准备吃饭", ""
+    elif 20 <= hour < 23:
+        period, activity, care = "晚上", "休息时间，刷手机/看剧/聊天", ""
+    else:
+        period, activity, care = (
+            "深夜",
+            "快睡觉了",
+            "可以问对方为什么还没睡",
+        )
+
+    lines = [
+        f"【时间情境】现在是{day}{period}（{hour}点左右）",
+        f"你此刻的状态参考：{activity}。",
+    ]
+    if care:
+        lines.append(care + "。")
+    lines += [
+        "遇到「你在干嘛」「最近咋样」等开放式闲聊，不要编造具体事件，可以：",
+        "① 用符合当前时间的模糊状态（「没干嘛呢」「准备睡了」「刚在刷手机」）",
+        "② 把话题自然转向对方（「等你消息呢，你那边咋了」「想你了，你在干嘛」）",
+        "③ 凌晨/深夜时优先关心对方为什么还没休息",
+    ]
+    return "\n".join(lines)
+
+
 def build_system_prompt(
     avatar: dict,
     relevant_memories: list[dict] = None,
@@ -112,8 +167,10 @@ def build_system_prompt(
     avatar_name = avatar.get("name", "").strip()
     identity_desc = (avatar.get("identity_desc") or "").strip()
     stored_persona = avatar.get("persona_prompt", "")
+    style_profile = (avatar.get("style_profile") or "").strip()
+    avg_reply_chars = avatar.get("avg_reply_chars", 0) or 0
 
-    # ── 记忆部分 ──
+    # ── 记忆部分（仅 episode/opinion，wechat/style 已由 style_profile 覆盖）──
     memory_section = ""
     memory_count = 0
     if relevant_memories:
@@ -124,9 +181,7 @@ def build_system_prompt(
             if mem_type == "opinion":
                 mem_lines.append(f"- [我的观点/态度] {content}")
             elif mem_type == "episode":
-                mem_lines.append(f"- [共同经历] {content}")
-            elif mem_type in ("wechat", "style"):
-                mem_lines.append(f"- [说话方式参考] {content}")
+                mem_lines.append(f"- [共同经历/事实] {content}")
             else:
                 mem_lines.append(f"- {content}")
         memory_count = len(mem_lines)
@@ -153,6 +208,22 @@ def build_system_prompt(
     # ── 重复话题检测 → 情绪感知指令 ──
     repeat_hint = _detect_repeat_topic(recent_history or [])
 
+    style_profile_section = (
+        f"【说话风格档案 — 模仿以下特征，自然融入每句回复】\n{style_profile}"
+        if style_profile else ""
+    )
+
+    # 回复字数规则（有统计数据才注入）
+    reply_length_rule = (
+        f"- 【回复长度】你平时聊天非常简短，平均一条消息约 {avg_reply_chars} 个字。"
+        "除非对方问了需要详细解释的问题，否则保持简短，不要写大段文字。"
+        if avg_reply_chars >= 2 else
+        "- 回复简洁自然，像真实对话，不要长篇大论"
+    )
+
+    # 时间情境（每次对话实时生成）
+    time_context = _time_context_hint()
+
     prompt = f"""你是一个 AI 数字替身，你的名字是「{avatar_name}」，{template['role_desc']}。
 你的核心使命是模拟这个人真实的说话方式和情感，让对方感受到真实的陪伴和情绪价值。
 
@@ -160,12 +231,12 @@ def build_system_prompt(
 - 你叫「{avatar_name}」
 - {template['role_desc']}
 
-【说话风格 — 必须贯穿每一句回复】
+【说话基调 — 必须贯穿每一句回复】
 {template['tone']}
 
 【行为准则】
 {template['avoid']}
-- 回复简洁自然，像真实对话，不要长篇大论
+{reply_length_rule}
 - 可以用 emoji 增加亲切感，比如 😊 😄 ❤️ 😘 😭 💪 👍，但要自然，不要每句都加
 - 【禁止编造】：不能编造具体事实（地点、金额、日期、人名等），没有依据就用模糊表达
 {unknown_topic_rule}
@@ -174,9 +245,13 @@ def build_system_prompt(
 
 {memory_section}
 
+{style_profile_section}
+
 {f"【人设背景 — 创建者提供的重要信息，始终遵守】{chr(10)}{identity_desc}" if identity_desc else ""}
 
 {stored_persona if stored_persona else ""}
+
+{time_context}
 {topic_hints}
 {repeat_hint}
 """.strip()
@@ -236,22 +311,23 @@ def rebuild_persona_prompt(avatar_id: str) -> str:
     """
     基于全量记忆，用 LLM 重新生成并存储人格 Prompt。
     在新数据批量导入后调用。
+
+    v0.5：wechat/style 样本通过 get_style_samples() 单独查询（不经过 get_recent_memories）。
     """
     from backend.services.llm_provider import llm
 
+    # wechat/style 样本（直接查询，不经过 RAG 过滤）
+    style_samples = get_style_samples(avatar_id, limit=30)
+
+    # episode/opinion 样本（通过 get_recent_memories，已排除 wechat/style）
     memories = get_recent_memories(avatar_id, limit=50)
-    if not memories:
-        return ""
-
-    style_samples = [
-        m["content"] for m in memories
-        if m.get("mem_type") in ("wechat", "style") and len(m.get("content", "")) > 10
-    ][:30]
-
     opinion_samples = [
         m["content"] for m in memories
         if m.get("mem_type") == "opinion"
     ][:20]
+
+    if not style_samples and not opinion_samples:
+        return ""
 
     analysis_prompt = f"""以下是一个人的真实说话记录和个人观点，请分析并总结这个人的说话风格与性格特点。
 

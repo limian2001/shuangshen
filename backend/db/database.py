@@ -112,10 +112,27 @@ CREATE TABLE IF NOT EXISTS query_expansions (
     updated_at  TEXT DEFAULT (datetime('now'))
 );
 
+-- ⑨ 原始上传存储表（v0.5）
+CREATE TABLE IF NOT EXISTS raw_uploads (
+    id              TEXT PRIMARY KEY,
+    avatar_id       TEXT NOT NULL REFERENCES avatars(id),
+    creator_id      TEXT NOT NULL REFERENCES users(id),
+    filename        TEXT DEFAULT '',
+    file_type       TEXT DEFAULT 'txt',    -- txt | html | paste
+    content         TEXT NOT NULL,         -- 原始全文
+    char_count      INTEGER DEFAULT 0,
+    content_hash    TEXT NOT NULL,         -- SHA256，防重复存储
+    process_version TEXT DEFAULT 'v0.5',   -- 处理时算法版本，便于增量重处理
+    processed_at    TEXT,                  -- NULL = 尚未处理 / 待重处理
+    created_at      TEXT DEFAULT (datetime('now'))
+);
+
 -- 索引
 CREATE INDEX IF NOT EXISTS idx_memories_avatar  ON memories(avatar_id);
 CREATE INDEX IF NOT EXISTS idx_chat_avatar      ON chat_messages(avatar_id, receiver_id);
 CREATE INDEX IF NOT EXISTS idx_topics_avatar    ON sensitive_topics(avatar_id);
+CREATE INDEX IF NOT EXISTS idx_raw_uploads_avatar ON raw_uploads(avatar_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_raw_uploads_hash ON raw_uploads(avatar_id, content_hash);
 """
 
 
@@ -152,13 +169,24 @@ def init_db():
 def _run_migrations(conn: sqlite3.Connection):
     """增量迁移 — 对已存在的数据库补充新字段，幂等安全"""
     migrations = [
-        # v0.2: 敏感话题增加语义描述字段
+        # v0.2
         "ALTER TABLE sensitive_topics ADD COLUMN topic_description TEXT DEFAULT ''",
-        # v0.2: 记忆表增加 bigram 索引字段（存储双字组合，加速检索）
         "ALTER TABLE memories ADD COLUMN bigrams TEXT DEFAULT '{}'",
-        # v0.2: 查询扩展缓存表（新建，executescript 里已有 CREATE IF NOT EXISTS，这里仅占位）
-        # v0.4: 替身增加 identity_desc（用户填写的人设描述，与 LLM 生成的 persona_prompt 分离）
+        # v0.4
         "ALTER TABLE avatars ADD COLUMN identity_desc TEXT DEFAULT ''",
+        # v0.5: 风格档案（LLM 提取的说话风格，注入 System Prompt）
+        "ALTER TABLE avatars ADD COLUMN style_profile TEXT DEFAULT ''",
+        # v0.5: 回复字数统计（导入时计算，注入 System Prompt 控制长度）
+        "ALTER TABLE avatars ADD COLUMN avg_reply_chars INTEGER DEFAULT 0",
+        # v0.5: 记忆优先级（0=系统提取，1=用户手动；RAG 打分时手动条目 ×1.5）
+        "ALTER TABLE memories ADD COLUMN priority INTEGER DEFAULT 0",
+        # v0.5: 向量 embedding（JSON 序列化浮点数组，用于余弦相似度检索）
+        "ALTER TABLE memories ADD COLUMN embedding TEXT DEFAULT NULL",
+        # v0.5: 导入任务的聊天日期范围（用于UI展示，避免重复导入）
+        "ALTER TABLE ingest_jobs ADD COLUMN date_start TEXT DEFAULT ''",
+        "ALTER TABLE ingest_jobs ADD COLUMN date_end TEXT DEFAULT ''",
+        # v0.5: 记忆对应的原始聊天日期（与 created_at 区分；NULL 表示无聊天来源）
+        "ALTER TABLE memories ADD COLUMN chat_date TEXT DEFAULT NULL",
     ]
     for sql in migrations:
         try:

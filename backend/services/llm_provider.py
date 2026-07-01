@@ -10,7 +10,7 @@ import json
 import os
 import urllib.request
 import urllib.error
-from typing import Generator
+from typing import Generator, List, Optional
 
 from backend.core.config import config
 
@@ -145,6 +145,72 @@ class LLMProvider:
         with urllib.request.urlopen(req, timeout=60) as resp:
             data = json.loads(resp.read())
         return data["choices"][0]["message"]["content"]
+
+    # ─── DeepSeek Embedding ──────────────────────────────────────
+    def embed(self, text: str) -> Optional[List[float]]:
+        """
+        将文本转换为向量（仅支持 DeepSeek provider）。
+        失败时返回 None，调用方应降级到关键词检索。
+        """
+        api_key = config.DEEPSEEK_API_KEY
+        if not api_key:
+            return None
+        try:
+            payload = json.dumps({
+                "model": config.DEEPSEEK_EMBED_MODEL,
+                "input": text[:2000],   # 防止超长
+            }).encode()
+            req = urllib.request.Request(
+                "https://api.deepseek.com/v1/embeddings",
+                data=payload,
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {api_key}",
+                },
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                data = json.loads(resp.read())
+            return data["data"][0]["embedding"]
+        except Exception as e:
+            print(f"[LLM] Embedding 调用失败: {e}")
+            return None
+
+    def batch_embed(self, texts: List[str]) -> List[Optional[List[float]]]:
+        """
+        批量获取向量。DeepSeek API 支持数组输入，单次调用。
+        返回与 texts 等长的列表，失败项为 None。
+        """
+        api_key = config.DEEPSEEK_API_KEY
+        if not api_key or not texts:
+            return [None] * len(texts)
+        try:
+            # DeepSeek embedding API 兼容 OpenAI，支持 input 为字符串数组
+            payload = json.dumps({
+                "model": config.DEEPSEEK_EMBED_MODEL,
+                "input": [t[:2000] for t in texts],
+            }).encode()
+            req = urllib.request.Request(
+                "https://api.deepseek.com/v1/embeddings",
+                data=payload,
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {api_key}",
+                },
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                data = json.loads(resp.read())
+            # API 返回的 data 数组按 index 排列
+            result: List[Optional[List[float]]] = [None] * len(texts)
+            for item in data.get("data", []):
+                idx = item.get("index", 0)
+                if idx < len(result):
+                    result[idx] = item["embedding"]
+            return result
+        except Exception as e:
+            print(f"[LLM] batch_embed 调用失败: {e}")
+            return [None] * len(texts)
 
     # ─── 本地模型 (Ollama) ───────────────────────────────────────
     def _call_local(

@@ -1,0 +1,5 @@
+flask>=3.0
+flask-cors
+python-dotenv
+requests
+chromadb>=0.5
