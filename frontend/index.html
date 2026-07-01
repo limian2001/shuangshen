@@ -198,6 +198,36 @@ select { cursor: pointer; }
 .sender-card:hover { border-color: var(--purple-mid); background: var(--purple-light); }
 .sender-card.selected { border-color: var(--purple); background: var(--purple-light); }
 .sender-card.guessed { border-style: dashed; border-color: var(--purple-mid); }
+
+/* ── 移动端响应式（小程序 web-view）── */
+@media (max-width: 700px) {
+  #sidebar {
+    position: fixed; top: 0; left: 0; bottom: 0; z-index: 100;
+    transform: translateX(-100%); transition: transform .25s ease;
+    width: 240px; box-shadow: 4px 0 20px rgba(0,0,0,.18);
+  }
+  #sidebar.mobile-open { transform: translateX(0); }
+  #mobile-topbar {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 16px; background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; z-index: 50; flex-shrink: 0;
+  }
+  #mobile-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,.35); z-index: 99;
+  }
+  #mobile-overlay.show { display: block; }
+  #main { display: flex; flex-direction: column; overflow: hidden; }
+  .page { padding: 14px 12px; overflow-y: auto; flex: 1; }
+  #chat-wrap { height: calc(100vh - 45px); }
+  #page-chat { height: calc(100vh - 45px); display: flex; flex-direction: column; }
+  .avatar-grid { grid-template-columns: 1fr; }
+  .auth-card { width: 92vw; padding: 28px 20px; }
+}
+@media (min-width: 701px) {
+  #mobile-topbar, #mobile-overlay { display: none !important; }
+}
 </style>
 </head>
 <body>
@@ -287,6 +317,13 @@ select { cursor: pointer; }
       </div>
     </div>
   </div>
+
+  <!-- 移动端顶部栏（桌面自动隐藏） -->
+  <div id="mobile-topbar">
+    <button onclick="toggleSidebar()" style="background:none;border:none;cursor:pointer;padding:4px 6px;color:var(--text);font-size:20px;line-height:1;border-radius:6px">☰</button>
+    <span id="mobile-page-title" style="font-weight:600;font-size:15px;color:var(--purple)">替身</span>
+  </div>
+  <div id="mobile-overlay" onclick="toggleSidebar()"></div>
 
   <!-- Main content -->
   <div id="main">
@@ -649,7 +686,7 @@ select { cursor: pointer; }
         </div>
         <div style="margin-top:16px;font-size:13px;color:var(--text-2)">
           <strong>接收者操作步骤：</strong><br>
-          1. 下载安装替身 App（当前为 Web 版，打开 http://localhost:5000/app）<br>
+          1. 打开替身小程序，或访问 <a href="https://app.mianmianlife.com/app" target="_blank">app.mianmianlife.com/app</a><br>
           2. 注册账号<br>
           3. 进入「绑定的替身」，输入上方共享码<br>
           4. 绑定成功后即可与替身对话
@@ -661,7 +698,8 @@ select { cursor: pointer; }
 </div>
 
 <script>
-const API = 'http://localhost:5000';
+// 本地开发用 localhost，线上自动使用当前域名（Nginx 反代）
+const API = window.location.hostname === 'localhost' ? 'http://localhost:5000' : '';
 let token = localStorage.getItem('ss_token');
 let currentUser = JSON.parse(localStorage.getItem('ss_user') || 'null');
 let currentAvatar = null;
@@ -684,6 +722,18 @@ const REL_PRESETS = {
 
 // ─── Init ───────────────────────────────────
 window.onload = () => {
+  // 微信小程序 web-view 将 token 和昵称拼在 URL 里传入
+  // 格式：/app?token=xxx&name=用户名
+  const params = new URLSearchParams(window.location.search);
+  const urlToken = params.get('token');
+  if (urlToken) {
+    token = urlToken;
+    const urlName = decodeURIComponent(params.get('name') || '用户');
+    currentUser = { display_name: urlName };
+    localStorage.setItem('ss_token', token);
+    localStorage.setItem('ss_user', JSON.stringify(currentUser));
+  }
+
   if (token && currentUser) {
     showApp();
     showPage('avatars');
@@ -759,6 +809,7 @@ function doLogout() {
 
 // ─── Navigation ──────────────────────────────
 function showPage(page) {
+  closeSidebar();
   const pages = ['avatars','received','topics','chat','memories','ingest','identity','share'];
   pages.forEach(p => {
     const el = document.getElementById('page-' + p);
@@ -769,6 +820,9 @@ function showPage(page) {
 
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   const navItems = document.querySelectorAll('.nav-item');
+
+  const titleMap = { avatars:'我的替身', received:'绑定的替身', topics:'话题预设' };
+  document.getElementById('mobile-page-title').textContent = titleMap[page] || '替身';
 
   if (page === 'avatars') {
     navItems[0]?.classList.add('active');
@@ -786,6 +840,8 @@ function showPage(page) {
 
 function showAvatarPage(sub) {
   if (!currentAvatar) return;
+  closeSidebar();
+  document.getElementById('mobile-page-title').textContent = currentAvatar.name || '替身';
   const subs = ['chat','memories','ingest','identity','share'];
   subs.forEach(s => {
     const el = document.getElementById('page-' + s);
@@ -1590,6 +1646,16 @@ function relEmoji(r) {
 }
 function memTypeLabel(t) { return {opinion:'观点',episode:'回忆',style:'风格',wechat:'微信导入'}[t] || t; }
 function strategyLabel(s) { return {deflect:'回避话题',preset_answer:'预设回答',admit_unknown:'坦白告知'}[s] || s; }
+
+// ─── 移动端侧边栏开关 ─────────────────────────
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('mobile-open');
+  document.getElementById('mobile-overlay').classList.toggle('show');
+}
+function closeSidebar() {
+  document.getElementById('sidebar').classList.remove('mobile-open');
+  document.getElementById('mobile-overlay').classList.remove('show');
+}
 
 let toastTimer;
 function toast(msg, type) {
