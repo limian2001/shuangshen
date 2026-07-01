@@ -5,15 +5,22 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# chromadb 依赖 libgomp（onnxruntime 需要）
+# 换成腾讯云镜像源（Debian Bookworm，国内服务器必须换否则极慢）
+RUN sed -i 's/deb.debian.org/mirrors.cloud.tencent.com/g' /etc/apt/sources.list.d/debian.sources 2>/dev/null; \
+    sed -i 's/deb.debian.org/mirrors.cloud.tencent.com/g' /etc/apt/sources.list 2>/dev/null; \
+    true
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libgomp1 \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# 先装依赖（利用 Docker 层缓存，代码改动不会重装包）
+# 先装依赖（利用 Docker 层缓存；用腾讯云 PyPI 镜像，国内速度快 100 倍）
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir \
+    -i https://mirrors.cloud.tencent.com/pypi/simple/ \
+    --trusted-host mirrors.cloud.tencent.com \
+    -r requirements.txt
 
 # 拷贝应用代码
 COPY backend/ ./backend/
