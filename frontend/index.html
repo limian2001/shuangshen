@@ -114,8 +114,8 @@ select { cursor: pointer; }
 .avatar-card-status { font-size: 11px; color: var(--text-3); display: flex; align-items: center; gap: 3px; }
 .status-dot { width: 6px; height: 6px; border-radius: 50%; background: #22c55e; display: inline-block; }
 .rel-tag { font-size: 11px; padding: 1px 7px; border-radius: 4px; background: var(--purple-light); color: var(--purple); font-weight: 500; }
-.avatar-del-btn { background: none; border: none; cursor: pointer; color: var(--text-3); font-size: 15px; padding: 2px 4px; border-radius: 4px; flex-shrink: 0; line-height: 1; }
-.avatar-del-btn:hover { color: var(--red); background: var(--red-light); }
+.avatar-del-btn { background: var(--red-light); border: 1px solid rgba(163,45,45,.25); cursor: pointer; color: var(--red); font-size: 11px; font-weight: 500; padding: 3px 9px; border-radius: 5px; flex-shrink: 0; line-height: 1.6; font-family: inherit; }
+.avatar-del-btn:hover { background: #f5d0d0; border-color: rgba(163,45,45,.4); }
 /* action buttons */
 .avatar-card-actions { display: flex; gap: 7px; }
 .aca-btn { flex: 1; display: flex; align-items: center; justify-content: center; gap: 4px; padding: 8px 4px; border-radius: 8px; font-size: 12px; font-weight: 500; cursor: pointer; border: 1px solid var(--border-md); background: var(--bg); color: var(--text-2); transition: all .15s; font-family: inherit; }
@@ -286,8 +286,9 @@ body.is-mobile .page {
   padding: 14px 14px !important; max-width: 100%;
 }
 body.is-mobile #page-chat {
-  flex: 1 !important; display: flex !important;
-  flex-direction: column !important; overflow: hidden; min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  overflow: hidden; min-height: 0;
 }
 body.is-mobile #chat-wrap {
   flex: 1; display: flex; flex-direction: column;
@@ -327,7 +328,7 @@ body.is-mobile .row .field   { width: 100%; }
   }
   #main { flex: 1; display: flex !important; flex-direction: column !important; overflow: hidden; min-height: 0; }
   .page { flex: 1; overflow-y: auto; padding: 14px !important; max-width: 100%; }
-  #page-chat { flex: 1 !important; display: flex !important; flex-direction: column !important; overflow: hidden; min-height: 0; }
+  #page-chat { flex: 1; flex-direction: column; overflow: hidden; min-height: 0; }
   #chat-wrap { flex: 1; display: flex; flex-direction: column; height: auto !important; overflow: hidden; }
   #chat-header { padding: 10px 14px; }
   #chat-messages { padding: 12px 14px; gap: 10px; }
@@ -613,35 +614,12 @@ body.is-mobile .row .field   { width: 100%; }
     <div id="page-ingest" class="page" style="display:none">
       <div class="page-header">
         <h2>喂入聊天数据</h2>
-        <p>导入聊天记录后，替身会学习你的说话风格，并自动提取你的观点、经历和性格特点</p>
-      </div>
-
-      <!-- 流程说明 -->
-      <div class="card" style="margin-bottom:16px;background:var(--purple-light);border-color:rgba(83,74,183,.2)">
-        <div style="display:flex;gap:20px;flex-wrap:wrap">
-          <div style="flex:1;min-width:140px;text-align:center;padding:8px 0">
-            <div style="font-size:22px;margin-bottom:4px">📋</div>
-            <div style="font-size:12px;font-weight:600;color:var(--purple)">① 导入聊天</div>
-            <div style="font-size:11px;color:var(--text-2);margin-top:2px">粘贴或上传聊天记录</div>
-          </div>
-          <div style="display:flex;align-items:center;color:var(--purple-mid);font-size:18px">→</div>
-          <div style="flex:1;min-width:140px;text-align:center;padding:8px 0">
-            <div style="font-size:22px;margin-bottom:4px">🤖</div>
-            <div style="font-size:12px;font-weight:600;color:var(--purple)">② AI 语义解析</div>
-            <div style="font-size:11px;color:var(--text-2);margin-top:2px">自动提取事实、观点、风格</div>
-          </div>
-          <div style="display:flex;align-items:center;color:var(--purple-mid);font-size:18px">→</div>
-          <div style="flex:1;min-width:140px;text-align:center;padding:8px 0">
-            <div style="font-size:22px;margin-bottom:4px">✨</div>
-            <div style="font-size:12px;font-weight:600;color:var(--purple)">③ 替身更新</div>
-            <div style="font-size:11px;color:var(--text-2);margin-top:2px">人格 Prompt 自动重建</div>
-          </div>
-        </div>
+        <p>导入聊天记录，替身自动学习你的说话风格和性格特点</p>
       </div>
 
       <div class="card">
         <!-- Tab 切换，默认粘贴 -->
-        <div style="display:flex;gap:8px;margin-bottom:18px">
+        <div style="display:flex;gap:8px;margin-bottom:14px">
           <button class="btn btn-secondary btn-sm" id="tab-paste" onclick="switchIngestTab('paste')" style="background:var(--purple-light);color:var(--purple);border-color:var(--purple-mid)">
             ✂️ 直接粘贴（推荐）
           </button>
@@ -652,26 +630,19 @@ body.is-mobile .row .field   { width: 100%; }
 
         <!-- Tab: 粘贴（默认显示） -->
         <div id="ingest-tab-paste">
-          <div style="background:var(--bg);border-radius:var(--radius);padding:12px 14px;margin-bottom:14px;font-size:12px;color:var(--text-2);line-height:1.9">
-            <strong style="color:var(--text)">推荐方式：微信长按多选消息 → 复制 → 粘贴到这里</strong><br>
-            <span style="color:var(--teal);font-weight:500">✓ 此方式包含完整日期，可追踪哪段时间的记录已导入</span><br>
-            <span style="color:var(--text-3)">也支持：微信邮件导出格式 · 「名字: 内容」格式 · 任意文本</span>
+          <!-- 粘贴框在最上方 -->
+          <div class="field" style="margin-bottom:10px">
+            <textarea id="paste-content" style="min-height:180px;font-size:12px;font-family:monospace;line-height:1.6" placeholder="把微信聊天记录粘贴到这里…
+
+推荐：手机微信 → 长按消息 → 多选 → 复制，格式如：
+小王  2024年1月1日 09:00  妈你吃饭了没
+妈妈  2024年1月1日 09:01  吃了，你呢
+
+支持分批粘贴，每次 100+ 条均可"></textarea>
           </div>
-          <!-- 步骤 1：粘贴内容 -->
-          <div class="field">
-            <label>聊天记录内容</label>
-            <textarea id="paste-content" style="min-height:200px;font-size:12px;font-family:monospace;line-height:1.6" placeholder="把微信聊天记录粘贴到这里…
-
-【推荐】手机微信 → 长按消息 → 多选 → 复制，格式如：
-小王
-2024年1月1日 09:00
-妈你吃饭了没
-
-妈妈
-2024年1月1日 09:01
-吃了，你呢
-
-一次可以选 100+ 条，支持分批粘贴导入"></textarea>
+          <!-- 简洁说明 -->
+          <div style="font-size:11px;color:var(--text-3);margin-bottom:12px;line-height:1.7">
+            📋 粘贴记录 → 🤖 AI 自动提取观点/风格 → ✨ 替身人格更新 &nbsp;·&nbsp; 也支持：微信邮件导出格式 · 「名字: 内容」格式
           </div>
           <button class="btn btn-secondary" onclick="detectSenders('paste')">
             🔍 检测发言人
@@ -1020,7 +991,8 @@ function showAvatarPage(sub) {
     if (el) el.style.display = 'none';
     document.getElementById('snav-' + s)?.classList.remove('active');
   });
-  document.getElementById('page-' + sub).style.display = 'block';
+  // chat 页是 flex 布局，需 display:flex；其他子页 block 即可
+  document.getElementById('page-' + sub).style.display = sub === 'chat' ? 'flex' : 'block';
   document.getElementById('snav-' + sub)?.classList.add('active');
 
   if (sub === 'chat') loadChatHistory();
@@ -1039,15 +1011,13 @@ function setCurrentAvatar(avatar) {
   document.getElementById('chat-avatar-rel').textContent = relLabel(avatar.relationship);
   document.getElementById('chat-avatar-icon').textContent = avatar.name?.[0] || '?';
   document.getElementById('share-code-display').textContent = avatar.share_code || '加载中...';
-  document.querySelectorAll('.avatar-card').forEach(c => c.classList.remove('selected'));
-  document.getElementById('avatar-card-' + avatar.id)?.classList.add('selected');
 }
 
-// 管理替身（人设/记忆/喂数据/共享）
+// 管理替身（人设/记忆/喂数据/共享），默认进喂数据页
 function openAvatarManage(avatar) {
   setCurrentAvatar(avatar);
   showPage('__none__');
-  showAvatarPage('identity');
+  showAvatarPage('ingest');
 }
 
 // 与替身对话（测试用）
@@ -1121,7 +1091,7 @@ async function loadAvatars() {
             <span class="avatar-card-status"><span class="status-dot"></span>${fmtDate(a.created_at)}</span>
           </div>
         </div>
-        <button class="avatar-del-btn" onclick="doDeleteAvatar('${a.id}','${esc(a.name)}')" title="删除">✕</button>
+        <button class="avatar-del-btn" onclick="doDeleteAvatar('${a.id}','${esc(a.name)}')">删除</button>
       </div>
       <div class="avatar-card-actions">
         <button class="aca-btn aca-manage" onclick="openAvatarManage(${aj})">
