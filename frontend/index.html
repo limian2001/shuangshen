@@ -31,10 +31,10 @@
 
 body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.6; min-height: 100vh; }
 
-/* ── Layout ── */
-#app { display: flex; min-height: 100vh; }
-#sidebar { width: 220px; flex-shrink: 0; background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; padding: 0; }
-#main { flex: 1; overflow-y: auto; }
+/* ── Layout（桌面默认，手机通过 body.is-mobile 覆盖）── */
+#app { display: flex; flex-direction: row; min-height: 100vh; }
+#sidebar { width: 220px; flex-shrink: 0; background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; padding: 0; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
+#main { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-height: 0; }
 
 /* ── Sidebar ── */
 .sidebar-brand { padding: 20px 18px 14px; border-bottom: 1px solid var(--border); }
@@ -112,9 +112,10 @@ select { cursor: pointer; }
 .avatar-meta { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 12px; color: var(--text-3); }
 
 /* ── Chat ── */
-#chat-wrap { display: flex; flex-direction: column; height: 100vh; }
+#chat-wrap { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 #chat-header { padding: 14px 20px; border-bottom: 1px solid var(--border); background: var(--surface); display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
 #chat-messages { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 14px; }
+.chat-hint { font-size: 11px; color: var(--text-3); margin-top: 6px; }
 .msg { display: flex; gap: 10px; max-width: 75%; }
 .msg.user { align-self: flex-end; flex-direction: row-reverse; }
 .msg-bubble { padding: 10px 14px; border-radius: 14px; font-size: 14px; line-height: 1.55; }
@@ -199,55 +200,118 @@ select { cursor: pointer; }
 .sender-card.selected { border-color: var(--purple); background: var(--purple-light); }
 .sender-card.guessed { border-style: dashed; border-color: var(--purple-mid); }
 
-/* ── 移动端响应式（小程序 web-view）── */
+/* ══════════════════════════════════════════════════════
+   移动端布局
+   触发：① body.is-mobile（JS 检测 screen.width，WeChat 专用）
+         ② @media (max-width: 767px)（标准浏览器备用）
+   两套规则内容相同，确保任意环境下都生效
+══════════════════════════════════════════════════════ */
 
-/* 默认隐藏移动端元素，防止闪烁 */
+/* 默认隐藏移动端专用元素 */
 #mobile-topbar { display: none; }
-#mobile-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.35); z-index: 99; }
+#mobile-subnav  { display: none; }
+#mobile-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 199; }
 #mobile-overlay.show { display: block; }
 
-/* 媒体查询（标准浏览器） */
-@media (max-width: 700px) {
+/* 子导航 tab 样式 */
+.m-subnav-item {
+  padding: 10px 16px; font-size: 13px; color: var(--text-2);
+  cursor: pointer; white-space: nowrap; flex-shrink: 0;
+  border-bottom: 2px solid transparent; transition: all .15s;
+}
+.m-subnav-item.active { color: var(--purple); border-bottom-color: var(--purple); font-weight: 500; }
+
+/* ── body.is-mobile（WeChat web-view JS 检测版）── */
+body.is-mobile #app {
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+body.is-mobile #sidebar {
+  position: fixed !important;
+  top: 0; left: 0; bottom: 0;
+  z-index: 200;
+  width: 260px; height: 100vh;
+  transform: translateX(-100%);
+  transition: transform .28s cubic-bezier(.4,0,.2,1);
+  box-shadow: 4px 0 24px rgba(0,0,0,.2);
+}
+body.is-mobile #sidebar.mobile-open { transform: translateX(0); }
+body.is-mobile #mobile-topbar {
+  display: flex !important;
+  align-items: center; gap: 8px;
+  height: 48px; padding: 0 12px;
+  background: var(--surface); border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+body.is-mobile #mobile-subnav.active {
+  display: flex !important;
+  overflow-x: auto; -webkit-overflow-scrolling: touch;
+  background: var(--surface); border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+body.is-mobile #main {
+  flex: 1; display: flex !important; flex-direction: column !important;
+  overflow: hidden; min-height: 0;
+}
+body.is-mobile .page {
+  flex: 1; overflow-y: auto;
+  padding: 14px 14px !important; max-width: 100%;
+}
+body.is-mobile #page-chat {
+  flex: 1 !important; display: flex !important;
+  flex-direction: column !important; overflow: hidden; min-height: 0;
+}
+body.is-mobile #chat-wrap {
+  flex: 1; display: flex; flex-direction: column;
+  height: auto !important; overflow: hidden;
+}
+body.is-mobile #chat-header  { padding: 10px 14px; }
+body.is-mobile #chat-messages { padding: 12px 14px; gap: 10px; }
+body.is-mobile #chat-input-wrap { padding: 10px 12px; flex-shrink: 0; }
+body.is-mobile .chat-hint    { display: none; }
+body.is-mobile .msg          { max-width: 88%; }
+body.is-mobile .avatar-grid  { grid-template-columns: 1fr !important; }
+body.is-mobile .auth-card    { width: calc(100vw - 32px) !important; padding: 28px 20px !important; }
+body.is-mobile .row          { flex-direction: column; }
+body.is-mobile .row .field   { width: 100%; }
+
+/* ── @media (max-width: 767px)（标准浏览器版，与上方规则对称）── */
+@media (max-width: 767px) {
+  #app { flex-direction: column !important; height: 100vh; overflow: hidden; }
   #sidebar {
-    position: fixed; top: 0; left: 0; bottom: 0; z-index: 100;
-    transform: translateX(-100%); transition: transform .25s ease;
-    width: 240px; box-shadow: 4px 0 20px rgba(0,0,0,.18);
+    position: fixed !important; top: 0; left: 0; bottom: 0; z-index: 200;
+    width: 260px; height: 100vh;
+    transform: translateX(-100%);
+    transition: transform .28s cubic-bezier(.4,0,.2,1);
+    box-shadow: 4px 0 24px rgba(0,0,0,.2);
   }
   #sidebar.mobile-open { transform: translateX(0); }
   #mobile-topbar {
-    display: flex !important; align-items: center; gap: 12px;
-    padding: 10px 16px; background: var(--surface);
-    border-bottom: 1px solid var(--border);
-    position: sticky; top: 0; z-index: 50; flex-shrink: 0;
+    display: flex !important; align-items: center; gap: 8px;
+    height: 48px; padding: 0 12px;
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
   }
-  #main { display: flex !important; flex-direction: column; min-height: 100vh; }
-  .page { padding: 14px 12px; overflow-y: auto; flex: 1; }
-  #chat-wrap { height: 100vh; }
-  #page-chat { flex: 1; display: flex; flex-direction: column; }
-  .avatar-grid { grid-template-columns: 1fr; }
-  .auth-card { width: 92vw; padding: 28px 20px; }
+  #mobile-subnav.active {
+    display: flex !important; overflow-x: auto; -webkit-overflow-scrolling: touch;
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  #main { flex: 1; display: flex !important; flex-direction: column !important; overflow: hidden; min-height: 0; }
+  .page { flex: 1; overflow-y: auto; padding: 14px !important; max-width: 100%; }
+  #page-chat { flex: 1 !important; display: flex !important; flex-direction: column !important; overflow: hidden; min-height: 0; }
+  #chat-wrap { flex: 1; display: flex; flex-direction: column; height: auto !important; overflow: hidden; }
+  #chat-header { padding: 10px 14px; }
+  #chat-messages { padding: 12px 14px; gap: 10px; }
+  #chat-input-wrap { padding: 10px 12px; flex-shrink: 0; }
+  .chat-hint { display: none; }
+  .msg { max-width: 88%; }
+  .avatar-grid { grid-template-columns: 1fr !important; }
+  .auth-card { width: calc(100vw - 32px) !important; padding: 28px 20px !important; }
+  .row { flex-direction: column; }
+  .row .field { width: 100%; }
 }
-
-/* JS class 兜底：WeChat web-view 中 innerWidth 虚报 980px，用 screen.width 检测后
-   给 body 加 .is-mobile，以下规则与媒体查询等效 */
-body.is-mobile #sidebar {
-  position: fixed !important; top: 0; left: 0; bottom: 0; z-index: 100;
-  transform: translateX(-100%); transition: transform .25s ease;
-  width: 240px; box-shadow: 4px 0 20px rgba(0,0,0,.18);
-}
-body.is-mobile #sidebar.mobile-open { transform: translateX(0) !important; }
-body.is-mobile #mobile-topbar {
-  display: flex !important; align-items: center; gap: 12px;
-  padding: 10px 16px; background: var(--surface);
-  border-bottom: 1px solid var(--border);
-  position: sticky; top: 0; z-index: 50; flex-shrink: 0;
-}
-body.is-mobile #main { display: flex !important; flex-direction: column !important; min-height: 100vh; }
-body.is-mobile .page { padding: 14px 12px !important; overflow-y: auto; flex: 1; }
-body.is-mobile #chat-wrap { height: 100vh; }
-body.is-mobile #page-chat { flex: 1 !important; display: flex !important; flex-direction: column !important; }
-body.is-mobile .avatar-grid { grid-template-columns: 1fr !important; }
-body.is-mobile .auth-card { width: 92vw !important; padding: 28px 20px !important; }
 </style>
 </head>
 <body>
@@ -342,10 +406,24 @@ body.is-mobile .auth-card { width: 92vw !important; padding: 28px 20px !importan
 
   <!-- Main content -->
   <div id="main">
-    <!-- 移动端顶部栏（在 #main 内部，使其出现在内容上方而非旁边）-->
+    <!-- 移动端顶部栏 -->
     <div id="mobile-topbar">
-      <button onclick="toggleSidebar()" style="background:none;border:none;cursor:pointer;padding:4px 8px;color:var(--text);font-size:22px;line-height:1;border-radius:6px">☰</button>
-      <span id="mobile-page-title" style="font-weight:600;font-size:15px;color:var(--purple)">替身</span>
+      <!-- 汉堡按钮（主页面显示） -->
+      <button id="topbar-menu-btn" onclick="toggleSidebar()"
+        style="background:none;border:none;cursor:pointer;padding:4px 8px;color:var(--text);font-size:22px;line-height:1;border-radius:6px;flex-shrink:0">☰</button>
+      <!-- 返回按钮（替身子页面显示） -->
+      <button id="topbar-back-btn" onclick="backToAvatars()"
+        style="display:none;background:none;border:none;cursor:pointer;padding:4px 8px;color:var(--purple);font-size:20px;line-height:1;border-radius:6px;flex-shrink:0">‹</button>
+      <span id="mobile-page-title" style="font-weight:600;font-size:15px;color:var(--text);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">替身</span>
+    </div>
+
+    <!-- 替身子页面横向导航（手机端，选中替身后显示） -->
+    <div id="mobile-subnav">
+      <div class="m-subnav-item active" id="msnav-chat"     onclick="showAvatarPage('chat')">对话</div>
+      <div class="m-subnav-item"        id="msnav-memories" onclick="showAvatarPage('memories')">记忆</div>
+      <div class="m-subnav-item"        id="msnav-ingest"   onclick="showAvatarPage('ingest')">喂数据</div>
+      <div class="m-subnav-item"        id="msnav-identity" onclick="showAvatarPage('identity')">人设</div>
+      <div class="m-subnav-item"        id="msnav-share"    onclick="showAvatarPage('share')">共享</div>
     </div>
 
     <!-- Page: avatars list -->
@@ -426,7 +504,7 @@ body.is-mobile .auth-card { width: 92vw !important; padding: 28px 20px !importan
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
             </button>
           </div>
-          <div style="font-size:11px;color:var(--text-3);margin-top:6px">Enter 发送 · Shift+Enter 换行</div>
+          <div class="chat-hint">Enter 发送 · Shift+Enter 换行</div>
         </div>
       </div>
     </div>
@@ -837,6 +915,12 @@ function doLogout() {
 // ─── Navigation ──────────────────────────────
 function showPage(page) {
   closeSidebar();
+
+  // 手机端：恢复汉堡按钮，隐藏返回，隐藏子导航
+  document.getElementById('topbar-menu-btn').style.display = '';
+  document.getElementById('topbar-back-btn').style.display = 'none';
+  document.getElementById('mobile-subnav').classList.remove('active');
+
   const pages = ['avatars','received','topics','chat','memories','ingest','identity','share'];
   pages.forEach(p => {
     const el = document.getElementById('page-' + p);
@@ -865,10 +949,25 @@ function showPage(page) {
   }
 }
 
+// 手机端：从替身子页面返回替身列表
+function backToAvatars() {
+  showPage('avatars');
+}
+
 function showAvatarPage(sub) {
   if (!currentAvatar) return;
   closeSidebar();
+
+  // 手机端：显示返回按钮，隐藏汉堡，显示子导航
+  document.getElementById('topbar-menu-btn').style.display = 'none';
+  document.getElementById('topbar-back-btn').style.display = '';
   document.getElementById('mobile-page-title').textContent = currentAvatar.name || '替身';
+  document.getElementById('mobile-subnav').classList.add('active');
+  // 更新子导航激活状态
+  ['chat','memories','ingest','identity','share'].forEach(s => {
+    document.getElementById('msnav-' + s)?.classList.toggle('active', s === sub);
+  });
+
   const subs = ['chat','memories','ingest','identity','share'];
   subs.forEach(s => {
     const el = document.getElementById('page-' + s);
