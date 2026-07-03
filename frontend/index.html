@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>替身 · Shuangshen</title>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -200,6 +200,13 @@ select { cursor: pointer; }
 .sender-card.guessed { border-style: dashed; border-color: var(--purple-mid); }
 
 /* ── 移动端响应式（小程序 web-view）── */
+
+/* 默认隐藏移动端元素，防止闪烁 */
+#mobile-topbar { display: none; }
+#mobile-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.35); z-index: 99; }
+#mobile-overlay.show { display: block; }
+
+/* 媒体查询（标准浏览器） */
 @media (max-width: 700px) {
   #sidebar {
     position: fixed; top: 0; left: 0; bottom: 0; z-index: 100;
@@ -208,26 +215,39 @@ select { cursor: pointer; }
   }
   #sidebar.mobile-open { transform: translateX(0); }
   #mobile-topbar {
-    display: flex; align-items: center; gap: 12px;
+    display: flex !important; align-items: center; gap: 12px;
     padding: 10px 16px; background: var(--surface);
     border-bottom: 1px solid var(--border);
     position: sticky; top: 0; z-index: 50; flex-shrink: 0;
   }
-  #mobile-overlay {
-    display: none; position: fixed; inset: 0;
-    background: rgba(0,0,0,.35); z-index: 99;
-  }
-  #mobile-overlay.show { display: block; }
-  #main { display: flex; flex-direction: column; overflow: hidden; }
+  #main { display: flex !important; flex-direction: column; min-height: 100vh; }
   .page { padding: 14px 12px; overflow-y: auto; flex: 1; }
-  #chat-wrap { height: calc(100vh - 45px); }
-  #page-chat { height: calc(100vh - 45px); display: flex; flex-direction: column; }
+  #chat-wrap { height: 100vh; }
+  #page-chat { flex: 1; display: flex; flex-direction: column; }
   .avatar-grid { grid-template-columns: 1fr; }
   .auth-card { width: 92vw; padding: 28px 20px; }
 }
-@media (min-width: 701px) {
-  #mobile-topbar, #mobile-overlay { display: none !important; }
+
+/* JS class 兜底：WeChat web-view 中 innerWidth 虚报 980px，用 screen.width 检测后
+   给 body 加 .is-mobile，以下规则与媒体查询等效 */
+body.is-mobile #sidebar {
+  position: fixed !important; top: 0; left: 0; bottom: 0; z-index: 100;
+  transform: translateX(-100%); transition: transform .25s ease;
+  width: 240px; box-shadow: 4px 0 20px rgba(0,0,0,.18);
 }
+body.is-mobile #sidebar.mobile-open { transform: translateX(0) !important; }
+body.is-mobile #mobile-topbar {
+  display: flex !important; align-items: center; gap: 12px;
+  padding: 10px 16px; background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; z-index: 50; flex-shrink: 0;
+}
+body.is-mobile #main { display: flex !important; flex-direction: column !important; min-height: 100vh; }
+body.is-mobile .page { padding: 14px 12px !important; overflow-y: auto; flex: 1; }
+body.is-mobile #chat-wrap { height: 100vh; }
+body.is-mobile #page-chat { flex: 1 !important; display: flex !important; flex-direction: column !important; }
+body.is-mobile .avatar-grid { grid-template-columns: 1fr !important; }
+body.is-mobile .auth-card { width: 92vw !important; padding: 28px 20px !important; }
 </style>
 </head>
 <body>
@@ -318,15 +338,15 @@ select { cursor: pointer; }
     </div>
   </div>
 
-  <!-- 移动端顶部栏（桌面自动隐藏） -->
-  <div id="mobile-topbar">
-    <button onclick="toggleSidebar()" style="background:none;border:none;cursor:pointer;padding:4px 6px;color:var(--text);font-size:20px;line-height:1;border-radius:6px">☰</button>
-    <span id="mobile-page-title" style="font-weight:600;font-size:15px;color:var(--purple)">替身</span>
-  </div>
   <div id="mobile-overlay" onclick="toggleSidebar()"></div>
 
   <!-- Main content -->
   <div id="main">
+    <!-- 移动端顶部栏（在 #main 内部，使其出现在内容上方而非旁边）-->
+    <div id="mobile-topbar">
+      <button onclick="toggleSidebar()" style="background:none;border:none;cursor:pointer;padding:4px 8px;color:var(--text);font-size:22px;line-height:1;border-radius:6px">☰</button>
+      <span id="mobile-page-title" style="font-weight:600;font-size:15px;color:var(--purple)">替身</span>
+    </div>
 
     <!-- Page: avatars list -->
     <div id="page-avatars" class="page" style="display:none">
@@ -719,6 +739,13 @@ const REL_PRESETS = {
   friend:          "我是你的老朋友，我们认识很久了，相处很自然放松，什么话都能聊，不用顾虑太多。",
   custom:          "",
 };
+
+// ─── 移动端检测（WeChat web-view 中 innerWidth 虚报为 980px，screen.width 才准）──
+(function() {
+  if (window.screen.width <= 768 || window.innerWidth <= 700) {
+    document.body.classList.add('is-mobile');
+  }
+})();
 
 // ─── Init ───────────────────────────────────
 window.onload = () => {
