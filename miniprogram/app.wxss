@@ -1,0 +1,6 @@
+/* 言己小程序 — 全局样式 */
+page {
+  font-family: -apple-system, "PingFang SC", "Helvetica Neue", sans-serif;
+  background: #f7f6f3;
+  color: #1a1a1a;
+}

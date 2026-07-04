@@ -57,6 +57,10 @@ class Config:
     JWT_SECRET: str = os.getenv("JWT_SECRET", "jwt-secret")
     JWT_EXPIRE_HOURS: int = int(os.getenv("JWT_EXPIRE_HOURS", 72))
 
+    # 对话历史
+    # 前端展示的最大条数（0 = 不限制）
+    CHAT_DISPLAY_LIMIT: int = int(os.getenv("CHAT_DISPLAY_LIMIT", 50))
+
     # 文件上传
     UPLOAD_FOLDER: Path = BASE_DIR / os.getenv("UPLOAD_FOLDER", "data/uploads")
     MAX_CONTENT_LENGTH: int = int(os.getenv("MAX_CONTENT_LENGTH_MB", 50)) * 1024 * 1024

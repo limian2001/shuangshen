@@ -1,0 +1,6 @@
+<!-- 首页：全屏 web-view -->
+<web-view
+  wx:if="{{webviewUrl}}"
+  src="{{webviewUrl}}"
+  bindmessage="onWebViewMessage"
+/>

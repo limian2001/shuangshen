@@ -1,0 +1,13 @@
+{
+  "pages": [
+    "pages/login/login",
+    "pages/home/home"
+  ],
+  "window": {
+    "navigationBarTitleText": "言己",
+    "navigationBarBackgroundColor": "#534AB7",
+    "navigationBarTextStyle": "white",
+    "backgroundColor": "#f7f6f3"
+  },
+  "sitemapLocation": "sitemap.json"
+}

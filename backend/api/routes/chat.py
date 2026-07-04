@@ -17,10 +17,11 @@ from backend.db.database import get_db, row_to_dict, rows_to_list
 from backend.services.topic_guard import is_safety_blocked, get_topic_hints
 from backend.services.persona_builder import get_chat_context
 from backend.services.llm_provider import llm
+from backend.core.config import config
 
 chat_bp = Blueprint("chat", __name__, url_prefix="/api/chat")
 
-MAX_HISTORY = 12  # 对话历史最多带入轮数（增加到12，支持更长上下文感知）
+MAX_HISTORY = 12  # LLM 上下文最多带入轮数
 
 
 @chat_bp.post("/<avatar_id>")
@@ -103,7 +104,11 @@ def get_history(avatar_id):
     if not _receiver_can_chat(avatar_id, g.user_id):
         return jsonify({"error": "无权限"}), 403
 
-    limit = int(request.args.get("limit", 30))
+    default_limit = config.CHAT_DISPLAY_LIMIT if config.CHAT_DISPLAY_LIMIT > 0 else 50
+    limit = int(request.args.get("limit", default_limit))
+    # 前端可传 limit=0 表示不限，但受服务器配置约束
+    if config.CHAT_DISPLAY_LIMIT > 0 and limit > config.CHAT_DISPLAY_LIMIT:
+        limit = config.CHAT_DISPLAY_LIMIT
     with get_db() as conn:
         rows = rows_to_list(conn.execute(
             """SELECT id, role, content, created_at FROM chat_messages

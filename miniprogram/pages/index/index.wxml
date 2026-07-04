@@ -1,0 +1,13 @@
+<view class="container">
+  <block wx:if="{{status === 'loading'}}">
+    <view class="logo">替身</view>
+    <view class="loading-dot"></view>
+    <view class="tip">正在登录…</view>
+  </block>
+
+  <block wx:if="{{status === 'error'}}">
+    <view class="logo">替身</view>
+    <view class="err">{{errMsg}}</view>
+    <button class="retry-btn" bindtap="onRetry">重试</button>
+  </block>
+</view>

@@ -1,0 +1,43 @@
+<!-- 登录页 -->
+<view class="container">
+  <view class="logo-wrap">
+    <view class="logo-icon">言</view>
+    <text class="logo-name">言己</text>
+    <text class="logo-sub">你的 AI 数字分身</text>
+  </view>
+
+  <!-- 检查中（自动静默登录） -->
+  <view class="btn-wrap" wx:if="{{step === 'checking'}}">
+    <view class="checking-tip">正在登录…</view>
+  </view>
+
+  <!-- 需要手机号授权（新用户） -->
+  <view class="btn-wrap" wx:if="{{step === 'need_phone'}}">
+    <!-- 昵称输入（type="nickname" 可触发微信头像昵称填充） -->
+    <view class="input-wrap">
+      <input
+        class="nickname-input"
+        type="nickname"
+        placeholder="你的昵称（可不填）"
+        placeholder-class="input-placeholder"
+        bindinput="onNicknameInput"
+        value="{{nickname}}"
+        maxlength="20"
+      />
+    </view>
+
+    <!-- 授权手机号按钮（必须用 button open-type） -->
+    <button
+      class="phone-btn"
+      open-type="getPhoneNumber"
+      bindgetphonenumber="onGetPhoneNumber"
+      loading="{{loading}}"
+      disabled="{{loading}}"
+    >
+      微信手机号一键登录
+    </button>
+
+    <text class="tip">登录即同意《用户协议》和《隐私政策》</text>
+    <text class="tip-sub">手机号仅用于账号识别，不会泄露</text>
+  </view>
+</view>

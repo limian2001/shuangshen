@@ -1,0 +1,49 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  background: #f7f7f7;
+}
+
+.logo {
+  font-size: 56rpx;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 48rpx;
+}
+
+.loading-dot {
+  width: 40rpx;
+  height: 40rpx;
+  border: 6rpx solid #e0e0e0;
+  border-top-color: #07c160;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.tip {
+  margin-top: 32rpx;
+  font-size: 28rpx;
+  color: #999;
+}
+
+.err {
+  margin: 0 60rpx 40rpx;
+  font-size: 28rpx;
+  color: #e64340;
+  text-align: center;
+  word-break: break-all;
+}
+
+.retry-btn {
+  background: #07c160;
+  color: #fff;
+  font-size: 30rpx;
+  padding: 0 80rpx;
+}
