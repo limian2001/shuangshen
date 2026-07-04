@@ -153,15 +153,17 @@ def build_system_prompt(
     relevant_memories: list[dict] = None,
     recent_history: list[dict] = None,
     topic_hints: str = "",
+    reaction_memories: list[dict] = None,
 ) -> str:
     """
-    构建完整的 System Prompt v0.3。
+    构建完整的 System Prompt v0.10。
 
     Args:
         avatar: 替身数据库记录
-        relevant_memories: RAG 检索到的相关记忆
+        relevant_memories: RAG 检索到的相关记忆（episode/opinion）
         recent_history: 最近对话历史（用于重复话题检测）
         topic_hints: 敏感话题提示字符串（由 topic_guard 生成）
+        reaction_memories: 情境反应模式记忆（reaction 类型，单独检索）
     """
     rel = avatar.get("relationship", "custom")
     template = RELATIONSHIP_TEMPLATES.get(rel, RELATIONSHIP_TEMPLATES["custom"])
@@ -195,7 +197,17 @@ def build_system_prompt(
     style_profile = (avatar.get("style_profile") or "").strip()
     avg_reply_chars = avatar.get("avg_reply_chars", 0) or 0
 
-    # ── 记忆部分（仅 episode/opinion，wechat/style 已由 style_profile 覆盖）──
+    # v0.10 新增字段
+    try:
+        style_features = json.loads(avatar.get("style_features") or "{}")
+    except Exception:
+        style_features = {}
+    try:
+        conversation_samples = json.loads(avatar.get("conversation_samples") or "[]")
+    except Exception:
+        conversation_samples = []
+
+    # ── 记忆部分（episode/opinion，wechat/style 已由 style_profile 覆盖）──
     memory_section = ""
     memory_count = 0
     if relevant_memories:
@@ -203,6 +215,8 @@ def build_system_prompt(
         for m in relevant_memories:
             mem_type = m.get("mem_type", "")
             content = m.get("content", "")
+            if mem_type in ("reaction",):
+                continue  # reaction 单独块处理
             if mem_type == "opinion":
                 mem_lines.append(f"- [我的观点/态度] {content}")
             elif mem_type == "episode":
@@ -212,6 +226,16 @@ def build_system_prompt(
         memory_count = len(mem_lines)
         if mem_lines:
             memory_section = "【相关记忆与观点 — 这是关于你的真实信息，回答时自然引用】\n" + "\n".join(mem_lines)
+
+    # ── reaction 情境反应模式 ──
+    reaction_section = ""
+    if reaction_memories:
+        lines = [f"- {m.get('content', '')}" for m in reaction_memories if m.get("content")]
+        if lines:
+            reaction_section = (
+                "【他在这段关系里的情境反应模式 — 当前对话场景若符合，优先参考这些模式】\n"
+                + "\n".join(lines)
+            )
 
     # ── 无记忆降级规则（动态）──
     if memory_count == 0:
@@ -237,6 +261,12 @@ def build_system_prompt(
         f"【说话风格档案 — 模仿以下特征，自然融入每句回复】\n{style_profile}"
         if style_profile else ""
     )
+
+    # ── 四类风格特征（结构化，优先级高于 style_profile 散文描述）──
+    style_features_section = _render_style_features(style_features) if style_features else ""
+
+    # ── 真实对话样本（few-shot，最直接的模仿素材）──
+    conversation_samples_section = _render_conversation_samples(conversation_samples) if conversation_samples else ""
 
     # 回复字数规则（有统计数据才注入）
     if avg_reply_chars >= 2:
@@ -279,7 +309,13 @@ def build_system_prompt(
 
 {memory_section}
 
+{reaction_section}
+
 {style_profile_section}
+
+{style_features_section}
+
+{conversation_samples_section}
 
 {f"【人设背景 — 创建者提供的重要信息，始终遵守】{chr(10)}{identity_desc}" if identity_desc else ""}
 
@@ -420,21 +456,122 @@ def get_chat_context(
     if not avatar:
         raise ValueError(f"替身不存在: {avatar_id}")
 
-    # RAG：检索相关记忆（memories + wechat 导入统一检索）
-    relevant = search_memories(avatar_id, user_query, top_k=6)
+    # T6：低密度消息跳过 RAG（闲聊直接靠风格特征和对话样本生成，避免无效检索）
+    relevant = []
+    if not _is_low_density(user_query):
+        relevant = search_memories(avatar_id, user_query, top_k=6)
+        # 检索结果不足时补充最新记忆
+        if len(relevant) < 3:
+            recent = get_recent_memories(avatar_id, limit=5)
+            existing_ids = {m["id"] for m in relevant}
+            for m in recent:
+                if m["id"] not in existing_ids:
+                    relevant.append(m)
+    else:
+        print(f"[CONTEXT] 低密度消息，跳过 RAG: {repr(user_query[:20])}")
 
-    # 检索结果不足时补充最新记忆
-    if len(relevant) < 3:
-        recent = get_recent_memories(avatar_id, limit=5)
-        existing_ids = {m["id"] for m in relevant}
-        for m in recent:
-            if m["id"] not in existing_ids:
-                relevant.append(m)
+    # 单独检索 reaction 记忆（情境反应模式），低密度消息也检索（反应模式对闲聊很有用）
+    reaction_memories = _get_reaction_memories(avatar_id, user_query, top_k=3)
 
     system_prompt = build_system_prompt(
         avatar=avatar,
         relevant_memories=relevant,
         recent_history=recent_history or [],
         topic_hints=topic_hints,
+        reaction_memories=reaction_memories,
     )
     return system_prompt, relevant
+
+
+def _get_reaction_memories(avatar_id: str, query: str, top_k: int = 3) -> list[dict]:
+    """单独检索 reaction 类型记忆（情境反应模式）"""
+    try:
+        from backend.services.memory_store import search_memories as _search
+        from backend.db.database import get_db, rows_to_list
+        # 先尝试向量检索（reaction 已在 Chroma）
+        all_results = _search(avatar_id, query, top_k=top_k + 6)
+        reactions = [m for m in all_results if m.get("mem_type") == "reaction"]
+        if reactions:
+            return reactions[:top_k]
+        # 向量检索没拿到 reaction 时，直接从 SQLite 按时间取最新的
+        with get_db() as conn:
+            rows = rows_to_list(conn.execute(
+                """SELECT id, content, mem_type, topic_tags, priority, created_at
+                   FROM memories WHERE avatar_id = ? AND mem_type = 'reaction'
+                   ORDER BY created_at DESC LIMIT ?""",
+                (avatar_id, top_k),
+            ).fetchall())
+        return rows
+    except Exception:
+        return []
+
+
+# ─────────────────────────────────────────────
+# 渲染辅助函数（v0.10）
+# ─────────────────────────────────────────────
+
+def _is_low_density(message: str) -> bool:
+    """
+    判断消息是否为低信息密度（闲聊/寒暄），低密度消息跳过 RAG。
+
+    低密度条件（满足任一）：
+    - 消息长度 ≤ 10 字
+    - 命中常见闲聊词表
+    """
+    msg = message.strip()
+    if len(msg) <= 10:
+        return True
+    LOW_DENSITY_PATTERNS = [
+        "在吗", "在不在", "干嘛呢", "干什么呢", "你好", "hi", "hello",
+        "吃了吗", "吃饭了吗", "睡了吗", "睡觉了", "起床了吗",
+        "最近咋样", "最近怎样", "最近好吗", "你咋了", "你怎么了",
+        "哈哈", "呵呵", "嗯嗯", "好的", "好哒", "嗯", "哦",
+        "想你了", "想你", "你想我吗", "有没有想我",
+    ]
+    msg_lower = msg.lower()
+    return any(p in msg_lower for p in LOW_DENSITY_PATTERNS)
+
+
+def _render_style_features(features: dict) -> str:
+    """把 style_features JSON 渲染成 System Prompt 可读文本"""
+    if not features:
+        return ""
+    lines = ["【他在这段关系里的说话特征 — 严格模仿，不要偏离】"]
+
+    emotional = features.get("emotional_expressions", {})
+    if isinstance(emotional, dict) and any(emotional.values()):
+        lines.append("情绪表达方式：")
+        label_map = {"happy": "开心/兴奋时", "unhappy": "不满/吐槽时", "comforting": "安慰对方时", "sad": "失落/难过时"}
+        for key, label in label_map.items():
+            vals = emotional.get(key, [])
+            if vals:
+                examples = "、".join(f"「{v}」" for v in vals[:4])
+                lines.append(f"  - {label}：{examples}")
+
+    deflect = features.get("deflection_patterns", "")
+    if deflect:
+        lines.append(f"转移/拒绝话题：{deflect}")
+
+    followup = features.get("followup_habit", "")
+    if followup:
+        lines.append(f"追问/反问习惯：{followup}")
+
+    signatures = features.get("signature_phrases", [])
+    if signatures:
+        examples = "、".join(f"「{p}」" for p in signatures[:5])
+        lines.append(f"标志性口头禅：{examples}")
+
+    return "\n".join(lines) if len(lines) > 1 else ""
+
+
+def _render_conversation_samples(samples: list) -> str:
+    """把 conversation_samples 渲染成 few-shot 示例块"""
+    if not samples:
+        return ""
+    lines = ["【他/她真实说过的话 — 模仿这个语感和节奏，不是模仿内容】"]
+    for s in samples[:12]:
+        if isinstance(s, dict) and s.get("q") and s.get("a"):
+            lines.append(f"对方：{s['q']}")
+            lines.append(f"他：{s['a']}")
+            lines.append("---")
+    return "\n".join(lines) if len(lines) > 1 else ""

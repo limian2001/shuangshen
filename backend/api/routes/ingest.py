@@ -405,6 +405,213 @@ def _generate_style_profile(style_samples: List[str], avatar: dict) -> str:
         return ""
 
 
+def _select_conversation_samples(all_messages: List[dict], avatar: dict) -> List[dict]:
+    """
+    从聊天记录里用 LLM 挑选 10-15 组有代表性的真实来回，供 few-shot 注入 System Prompt。
+
+    返回 [{"q": "对方说的话", "a": "他的回复"}, ...] 形式的 JSON 列表。
+    注重覆盖：闲聊/情绪倾诉/玩笑/日常询问/关心 等不同场景。
+    """
+    from backend.services.llm_provider import llm
+
+    # 把消息整理成来回对（连续的 not_me → me 为一对）
+    pairs: List[dict] = []
+    i = 0
+    msgs = all_messages
+    while i < len(msgs) - 1:
+        if not msgs[i].get("is_from_me") and msgs[i + 1].get("is_from_me"):
+            q = msgs[i].get("content", "").strip()
+            a = msgs[i + 1].get("content", "").strip()
+            if 2 < len(q) < 80 and 2 < len(a) < 100 and not q.startswith("[") and not a.startswith("["):
+                pairs.append({"q": q, "a": a})
+        i += 1
+
+    if len(pairs) < 3:
+        return []
+
+    # 最多给 LLM 看 80 对，让它从中挑有代表性的
+    import random
+    sample_pool = random.sample(pairs, min(80, len(pairs)))
+    pool_text = "\n".join(f"{idx+1}. 对方：{p['q']}\n   他：{p['a']}" for idx, p in enumerate(sample_pool))
+
+    rel = avatar.get("relationship", "friend")
+    prompt = f"""以下是两个人的真实聊天片段（关系：{rel}），其中「他」是我们要模拟的人。
+
+{pool_text}
+
+请从中挑选 10-12 组最能体现「他」说话风格的对话，要求：
+- 覆盖不同场景：闲聊/情绪倾诉/玩笑调侃/日常关心/随口一问 等
+- 优先选「他」回复最有个人特色、最真实的片段
+- 避免重复相似内容
+- 只选原文，不要修改
+
+输出 JSON 数组，格式：
+[{{"q": "对方原话", "a": "他的原话"}}, ...]
+
+只输出 JSON，不要其他文字。"""
+
+    try:
+        raw = llm.chat(
+            system_prompt="你是对话样本筛选专家，从真实聊天记录中挑选最有代表性的片段。只输出 JSON。",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=1500,
+            temperature=0.2,
+        ).strip()
+        import re
+        json_match = re.search(r'\[.*\]', raw, re.DOTALL)
+        if not json_match:
+            return []
+        samples = json.loads(json_match.group())
+        # 验证格式
+        valid = [s for s in samples if isinstance(s, dict) and "q" in s and "a" in s]
+        return valid[:15]
+    except Exception as e:
+        print(f"[INGEST] 对话样本选取失败（不影响导入）: {e}")
+        return []
+
+
+def _generate_style_features(style_samples: List[str], avatar: dict) -> dict:
+    """
+    从真实聊天样本中提取四类深层风格特征，供 System Prompt 结构化注入。
+
+    返回 dict：
+    {
+      "emotional_expressions": {"happy": [...], "unhappy": [...], "comforting": [...], "sad": [...]},
+      "deflection_patterns": "描述转移/拒绝话题的方式",
+      "followup_habit": "描述追问/反问习惯",
+      "signature_phrases": ["口头禅1", "口头禅2", ...]
+    }
+    强调在这两个人的具体对话关系里提取，而非通用人格描述。
+    """
+    from backend.services.llm_provider import llm
+
+    if not style_samples:
+        return {}
+
+    rel = avatar.get("relationship", "friend")
+    samples_text = "\n".join(f"- {s}" for s in style_samples[:40])
+
+    prompt = f"""以下是两个人真实聊天记录中「他/她」发出的消息（关系：{rel}）。
+请分析在这段具体的对话关系里，这个人的深层说话特征。
+
+【他/她的消息样本】
+{samples_text}
+
+请提取以下四类特征，输出 JSON（只输出 JSON，不要其他文字）：
+
+{{
+  "emotional_expressions": {{
+    "happy": ["他高兴/开心时常说的词或句式，列3-5个例子"],
+    "unhappy": ["他不满/吐槽时常说的词或句式"],
+    "comforting": ["他安慰对方时常说的话"],
+    "sad": ["他失落/难过时常说的话，如果样本中没有则返回空数组"]
+  }},
+  "deflection_patterns": "当他不想聊某话题或想结束某个方向时，他通常怎么做？（举具体例子）",
+  "followup_habit": "他聊天时会主动追问/反问吗？频率如何？常用什么句式？（具体描述）",
+  "signature_phrases": ["他最有个人特色的口头禅或惯用句式，列3-6个"]
+}}
+
+注意：严格基于样本中出现的内容，不要推断或编造。如果某类证据不足，直接返回空字符串或空数组。"""
+
+    try:
+        raw = llm.chat(
+            system_prompt="你是语言特征分析专家，从真实聊天样本中精确提取说话模式。只输出 JSON。",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=600,
+            temperature=0.2,
+        ).strip()
+        import re
+        json_match = re.search(r'\{.*\}', raw, re.DOTALL)
+        if not json_match:
+            return {}
+        return json.loads(json_match.group())
+    except Exception as e:
+        print(f"[INGEST] 风格特征提取失败（不影响导入）: {e}")
+        return {}
+
+
+def _extract_reaction_patterns(
+    all_messages: List[dict],
+    avatar_id: str,
+    avatar: dict,
+    date_range: Optional[dict] = None,
+) -> List[dict]:
+    """
+    从对话中提取情境反应模式（reaction 类型记忆）。
+
+    分析在这段具体关系里，当对方处于某种情境时，「他」的典型反应是什么。
+    每条 reaction 格式：「场景描述 → 他的典型反应（含具体用词）」
+    存为 mem_type=reaction，进入 SQLite + Chroma。
+    """
+    from backend.services.llm_provider import llm
+
+    max_chars = config.EXTRACT_MAX_CHARS or 4000
+    conversation_text = format_conversation_for_llm(all_messages, max_chars=max_chars)
+    if not conversation_text:
+        return []
+
+    rel = avatar.get("relationship", "friend")
+    prompt = f"""以下是两个人的真实聊天记录（关系：{rel}），其中「【我】」是被分析的人。
+
+{conversation_text}
+
+请分析在这段具体的对话关系里，当对方处于不同情境时，「【我】」的典型反应模式。
+
+提取 5-8 个情境反应，格式：「场景描述 → 他的典型反应（含具体说法）」
+
+关注这几类场景（有样本才写，没有就跳过）：
+- 对方诉苦/抱怨时
+- 对方分享好消息时
+- 对方问「你在干嘛」「最近咋样」等闲聊时
+- 对方生气/情绪不好时
+- 对方提出某个请求时
+- 话题冷场/不知道说什么时
+- 对方开玩笑/调侃时
+- 聊到某类特定话题（如工作/钱/感情）时
+
+输出 JSON 数组：
+[
+  {{"scene": "对方诉苦或抱怨时", "reaction": "通常先用「嗯嗯」「哎」接情绪，再问「咋了」，很少直接给建议"}},
+  ...
+]
+
+只输出 JSON，不要其他文字。严格基于聊天记录，不要编造。"""
+
+    try:
+        raw = llm.chat(
+            system_prompt="你是人际互动模式分析专家，从真实对话中提取一个人在特定情境下的反应规律。只输出 JSON。",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=800,
+            temperature=0.2,
+        ).strip()
+        import re
+        json_match = re.search(r'\[.*\]', raw, re.DOTALL)
+        if not json_match:
+            return []
+        patterns = json.loads(json_match.group())
+
+        chat_date = (date_range or {}).get("start") or None
+        items = []
+        for p in patterns:
+            if not isinstance(p, dict):
+                continue
+            scene = (p.get("scene") or "").strip()
+            reaction = (p.get("reaction") or "").strip()
+            if scene and reaction:
+                items.append({
+                    "content": f"【{scene}】{reaction}",
+                    "mem_type": "reaction",
+                    "source": "llm_extracted",
+                    "topic_tags": ["反应模式"],
+                    "priority": 0,
+                    "chat_date": chat_date,
+                })
+        return items
+    except Exception as e:
+        print(f"[INGEST] 反应模式提取失败（不影响导入）: {e}")
+        return []
+
+
 def _merge_parsed(results: List[dict], my_names: Optional[List[str]] = None) -> dict:
     """
     合并多个 parse_text / parse_wechat_html 的返回结果。
@@ -472,7 +679,7 @@ def _do_import(
     raw_filename: str = "",
     raw_file_type: str = "paste",
 ) -> object:
-    """统一的导入处理逻辑 v0.5"""
+    """统一的导入处理逻辑 v0.10"""
     from flask import g
 
     job_id = new_id()
@@ -530,26 +737,35 @@ def _do_import(
         style_count = style_r["added"]
         style_skipped = style_r["skipped"]
 
-        # ④ LLM 生成风格档案 → 存 avatars.style_profile（v0.5）
+        # ④ LLM 生成三类风格数据 → 存 avatars（v0.10）
         style_profile_updated = False
+        with get_db() as conn:
+            avatar_row = conn.execute(
+                "SELECT * FROM avatars WHERE id = ?", (avatar_id,)
+            ).fetchone()
+        avatar_data = row_to_dict(avatar_row) if avatar_row else {}
+
         try:
-            with get_db() as conn:
-                avatar_row = conn.execute(
-                    "SELECT * FROM avatars WHERE id = ?", (avatar_id,)
-                ).fetchone()
-            if avatar_row:
-                from backend.db.database import row_to_dict
-                avatar = row_to_dict(avatar_row)
-                new_profile = _generate_style_profile(style_samples, avatar)
-                if new_profile:
-                    with get_db() as conn:
-                        conn.execute(
-                            "UPDATE avatars SET style_profile=?, updated_at=datetime('now') WHERE id=?",
-                            (new_profile, avatar_id),
-                        )
-                    style_profile_updated = True
+            new_profile = _generate_style_profile(style_samples, avatar_data)
+            new_features = _generate_style_features(style_samples, avatar_data)
+            new_samples = _select_conversation_samples(all_messages, avatar_data)
+            update_fields: dict = {}
+            if new_profile:
+                update_fields["style_profile"] = new_profile
+            if new_features:
+                update_fields["style_features"] = json.dumps(new_features, ensure_ascii=False)
+            if new_samples:
+                update_fields["conversation_samples"] = json.dumps(new_samples, ensure_ascii=False)
+            if update_fields:
+                set_clause = ", ".join(f"{k}=?" for k in update_fields)
+                with get_db() as conn:
+                    conn.execute(
+                        f"UPDATE avatars SET {set_clause}, updated_at=datetime('now') WHERE id=?",
+                        (*update_fields.values(), avatar_id),
+                    )
+                style_profile_updated = True
         except Exception as e:
-            print(f"[INGEST] 风格档案生成失败（不影响导入）: {e}")
+            print(f"[INGEST] 风格数据生成失败（不影响导入）: {e}")
 
         # ⑤ LLM 语义解析 → episode/opinion → memories（priority=0）
         semantic_count = 0
@@ -566,6 +782,18 @@ def _do_import(
         except Exception as e:
             semantic_error = str(e)
             print(f"[INGEST] LLM 语义解析失败（不影响导入）: {e}")
+
+        # ⑤b LLM 提取 reaction 反应模式记忆（v0.10）
+        reaction_count = 0
+        try:
+            reaction_memories = _extract_reaction_patterns(
+                all_messages, avatar_id, avatar_data, date_range=stats["date_range"]
+            )
+            if reaction_memories:
+                reac_r = add_memories_batch(avatar_id, reaction_memories)
+                reaction_count = reac_r["added"]
+        except Exception as e:
+            print(f"[INGEST] 反应模式提取失败（不影响导入）: {e}")
 
         # ⑥ 触发人格 Prompt 重建
         try:

@@ -218,6 +218,10 @@ def _run_migrations(conn: sqlite3.Connection):
         # v0.9: 用户状态 + 管理员标志
         "ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'active'",
         "ALTER TABLE users ADD COLUMN is_admin INTEGER DEFAULT 0",
+        # v0.10: 真实对话样本（JSON数组，直接注入 prompt 作 few-shot 示例）
+        "ALTER TABLE avatars ADD COLUMN conversation_samples TEXT DEFAULT '[]'",
+        # v0.10: 四类风格特征（JSON，情绪表达/转移话题/追问习惯/标志句式）
+        "ALTER TABLE avatars ADD COLUMN style_features TEXT DEFAULT '{}'",
     ]
     for sql in migrations:
         try:
