@@ -215,6 +215,9 @@ def _run_migrations(conn: sqlite3.Connection):
         "ALTER TABLE avatars ADD COLUMN address_to_other TEXT DEFAULT ''",
         "ALTER TABLE avatars ADD COLUMN address_from_other TEXT DEFAULT ''",
         "ALTER TABLE avatars ADD COLUMN custom_rel_name TEXT DEFAULT ''",
+        # v0.9: 用户状态 + 管理员标志
+        "ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'active'",
+        "ALTER TABLE users ADD COLUMN is_admin INTEGER DEFAULT 0",
     ]
     for sql in migrations:
         try:

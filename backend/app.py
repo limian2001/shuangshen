@@ -21,6 +21,7 @@ from backend.api.routes.memories import memories_bp
 from backend.api.routes.ingest import ingest_bp
 from backend.api.routes.chat import chat_bp
 from backend.api.routes.topics import topics_bp
+from backend.api.routes.admin import admin_bp
 
 
 def create_app() -> Flask:
@@ -35,6 +36,7 @@ def create_app() -> Flask:
     app.register_blueprint(ingest_bp)
     app.register_blueprint(chat_bp)
     app.register_blueprint(topics_bp)
+    app.register_blueprint(admin_bp)
 
     # CORS — 允许前端页面调用 API
     @app.after_request
@@ -56,6 +58,12 @@ def create_app() -> Flask:
     @app.get("/app/")
     def frontend():
         return send_from_directory(str(FRONTEND_DIR), "index.html")
+
+    # 管理后台页面
+    @app.get("/admin")
+    @app.get("/admin/")
+    def admin_frontend():
+        return send_from_directory(str(FRONTEND_DIR), "admin.html")
 
     # 健康检查
     @app.get("/")

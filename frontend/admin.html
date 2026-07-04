@@ -1,0 +1,1026 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>替身 · 管理后台</title>
+<style>
+/* ── Reset & Variables ── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --purple:   #534AB7;
+  --purple-d: #3f38a0;
+  --purple-l: #ece9ff;
+  --bg:       #f5f4f2;
+  --card:     #ffffff;
+  --text:     #1a1a2e;
+  --text-2:   #555568;
+  --text-3:   #999aad;
+  --border:   #e4e3ef;
+  --red:      #d33;
+  --green:    #2a9d5c;
+  --yellow:   #d97706;
+  --sidebar-w: 220px;
+}
+
+body { font-family: -apple-system, "PingFang SC", "Helvetica Neue", sans-serif; background: var(--bg); color: var(--text); }
+
+/* ── Layout ── */
+#login-screen {
+  min-height: 100vh; display: flex; align-items: center; justify-content: center; background: var(--bg);
+}
+#app { display: none; min-height: 100vh; }
+
+.layout { display: flex; min-height: 100vh; }
+
+/* ── Sidebar ── */
+.sidebar {
+  width: var(--sidebar-w); background: var(--card); border-right: 1px solid var(--border);
+  display: flex; flex-direction: column; position: fixed; top: 0; bottom: 0; z-index: 10;
+}
+.sidebar-logo {
+  padding: 20px 20px 16px; border-bottom: 1px solid var(--border);
+  font-size: 17px; font-weight: 700; color: var(--purple); letter-spacing: 0.5px;
+}
+.sidebar-logo span { font-size: 11px; color: var(--text-3); font-weight: 400; display: block; margin-top: 2px; }
+.sidebar-nav { flex: 1; padding: 12px 0; }
+.nav-item {
+  display: flex; align-items: center; gap: 10px; padding: 10px 20px;
+  cursor: pointer; font-size: 14px; color: var(--text-2); border-radius: 0;
+  transition: all .12s; user-select: none;
+}
+.nav-item:hover { background: var(--purple-l); color: var(--purple); }
+.nav-item.active { background: var(--purple-l); color: var(--purple); font-weight: 600; border-right: 3px solid var(--purple); }
+.nav-item svg { flex-shrink: 0; }
+.sidebar-user {
+  padding: 14px 20px; border-top: 1px solid var(--border);
+  font-size: 12px; color: var(--text-3);
+}
+.sidebar-user b { color: var(--text-2); display: block; margin-bottom: 2px; }
+.logout-btn {
+  margin-top: 6px; background: none; border: none; cursor: pointer;
+  font-size: 12px; color: var(--red); padding: 0; font-family: inherit;
+}
+
+/* ── Main Content ── */
+.main { margin-left: var(--sidebar-w); flex: 1; }
+.page-header {
+  padding: 20px 28px 16px; background: var(--card); border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.page-header h1 { font-size: 18px; font-weight: 700; }
+.page-body { padding: 24px 28px; }
+
+/* ── Cards ── */
+.card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; }
+.card-body { padding: 20px; }
+.stat-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; margin-bottom: 24px; }
+.stat-card {
+  background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+  padding: 18px 20px;
+}
+.stat-label { font-size: 12px; color: var(--text-3); margin-bottom: 6px; }
+.stat-value { font-size: 28px; font-weight: 700; color: var(--text); }
+.stat-sub { font-size: 11px; color: var(--text-3); margin-top: 2px; }
+
+/* ── Tables ── */
+.table-wrap { border-radius: 10px; border: 1px solid var(--border); overflow: hidden; background: var(--card); }
+table { width: 100%; border-collapse: collapse; }
+thead { background: #f9f8ff; }
+th { padding: 11px 14px; text-align: left; font-size: 12px; font-weight: 600; color: var(--text-3); border-bottom: 1px solid var(--border); }
+td { padding: 11px 14px; font-size: 13px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: #fafaff; }
+.clickable { cursor: pointer; }
+.clickable:hover { background: var(--purple-l) !important; }
+
+/* ── Search & Controls ── */
+.toolbar { display: flex; gap: 10px; align-items: center; margin-bottom: 16px; }
+.search-box {
+  flex: 1; max-width: 360px; padding: 8px 12px; border: 1px solid var(--border);
+  border-radius: 8px; font-size: 14px; font-family: inherit; outline: none;
+}
+.search-box:focus { border-color: var(--purple); }
+
+/* ── Buttons ── */
+.btn {
+  padding: 7px 14px; border-radius: 7px; font-size: 13px; font-weight: 500;
+  cursor: pointer; border: 1px solid var(--border); font-family: inherit;
+  background: var(--card); color: var(--text-2); transition: all .1s; display: inline-flex; align-items: center; gap: 6px;
+}
+.btn:hover { background: var(--purple-l); border-color: var(--purple); color: var(--purple); }
+.btn-primary { background: var(--purple); color: #fff; border-color: var(--purple); }
+.btn-primary:hover { background: var(--purple-d); border-color: var(--purple-d); color: #fff; }
+.btn-danger { background: #fff0f0; color: var(--red); border-color: #fcc; }
+.btn-danger:hover { background: var(--red); color: #fff; border-color: var(--red); }
+.btn-sm { padding: 4px 10px; font-size: 12px; }
+
+/* ── Badges ── */
+.badge {
+  display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 500;
+}
+.badge-active   { background: #e8f8ef; color: var(--green); }
+.badge-suspended{ background: #fff3e0; color: var(--yellow); }
+.badge-admin    { background: var(--purple-l); color: var(--purple); }
+.badge-type     { background: #f0efff; color: #6060aa; }
+
+/* ── Pagination ── */
+.pagination { display: flex; gap: 6px; align-items: center; margin-top: 14px; }
+.page-btn {
+  padding: 5px 10px; border-radius: 6px; font-size: 13px; cursor: pointer;
+  border: 1px solid var(--border); background: var(--card); font-family: inherit;
+}
+.page-btn.active { background: var(--purple); color: #fff; border-color: var(--purple); }
+.page-btn:disabled { opacity: .4; cursor: default; }
+.page-info { font-size: 12px; color: var(--text-3); }
+
+/* ── Modal ── */
+.modal-backdrop {
+  display: none; position: fixed; inset: 0; background: rgba(0,0,0,.45);
+  z-index: 100; align-items: center; justify-content: center;
+}
+.modal-backdrop.open { display: flex; }
+.modal {
+  background: var(--card); border-radius: 14px; width: 860px; max-width: 95vw;
+  max-height: 90vh; display: flex; flex-direction: column; overflow: hidden;
+}
+.modal-header {
+  padding: 18px 24px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.modal-header h2 { font-size: 16px; font-weight: 700; }
+.modal-close {
+  background: none; border: none; cursor: pointer; font-size: 20px;
+  color: var(--text-3); line-height: 1;
+}
+.modal-body { flex: 1; overflow-y: auto; padding: 20px 24px; }
+.modal-footer { padding: 14px 24px; border-top: 1px solid var(--border); display: flex; gap: 10px; justify-content: flex-end; }
+
+/* ── Tabs (inside modal) ── */
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 18px; }
+.tab {
+  padding: 8px 16px; cursor: pointer; font-size: 13px; color: var(--text-3);
+  border-bottom: 2px solid transparent; margin-bottom: -1px; font-weight: 500;
+}
+.tab.active { color: var(--purple); border-bottom-color: var(--purple); }
+
+/* ── Info grid ── */
+.info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 24px; }
+.info-row { font-size: 13px; }
+.info-label { color: var(--text-3); font-size: 11px; margin-bottom: 2px; }
+.info-val { font-weight: 500; word-break: break-all; }
+
+/* ── Memory / chat ── */
+.mem-item { padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px; }
+.mem-meta { font-size: 11px; color: var(--text-3); margin-bottom: 4px; display: flex; gap: 8px; flex-wrap: wrap; }
+.mem-content { font-size: 13px; line-height: 1.6; }
+.chat-msg { display: flex; gap: 8px; margin-bottom: 10px; align-items: flex-start; }
+.chat-msg.user { flex-direction: row-reverse; }
+.chat-bubble { max-width: 65%; padding: 8px 12px; border-radius: 10px; font-size: 13px; line-height: 1.5; word-break: break-word; }
+.chat-msg.user .chat-bubble { background: var(--purple); color: #fff; border-radius: 10px 2px 10px 10px; }
+.chat-msg.bot  .chat-bubble { background: #f0efff; color: var(--text); border-radius: 2px 10px 10px 10px; }
+.chat-meta { font-size: 10px; color: var(--text-3); margin-top: 3px; text-align: right; }
+.chat-msg.user .chat-meta { text-align: left; }
+.chat-avatar-icon { width: 28px; height: 28px; border-radius: 50%; background: var(--purple-l); color: var(--purple); font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 2px; }
+
+/* ── Collapsible ── */
+.collapse-toggle { font-size: 12px; color: var(--purple); cursor: pointer; display: inline-flex; align-items: center; gap: 4px; user-select: none; margin-bottom: 8px; }
+.collapse-body { display: none; }
+.collapse-body.open { display: block; }
+
+/* ── Upload preview ── */
+.upload-card { border: 1px solid var(--border); border-radius: 8px; margin-bottom: 10px; overflow: hidden; }
+.upload-head { padding: 10px 14px; background: #fafaff; display: flex; align-items: center; justify-content: space-between; cursor: pointer; }
+.upload-head:hover { background: var(--purple-l); }
+.upload-body { padding: 12px 14px; font-size: 12px; color: var(--text-2); background: #fdfdff; display: none; }
+.upload-body.open { display: block; }
+.upload-preview { font-family: monospace; font-size: 11px; background: #f7f6ff; padding: 8px; border-radius: 6px; white-space: pre-wrap; word-break: break-all; max-height: 200px; overflow-y: auto; }
+
+/* ── Section heading ── */
+.section-h { font-size: 14px; font-weight: 700; margin-bottom: 12px; color: var(--text); display: flex; align-items: center; gap: 8px; }
+.section-h small { font-size: 11px; color: var(--text-3); font-weight: 400; }
+
+/* ── Login form ── */
+.login-card {
+  width: 380px; background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 36px 32px;
+}
+.login-logo { text-align: center; margin-bottom: 28px; }
+.login-logo .icon { width: 56px; height: 56px; background: var(--purple); color: #fff; border-radius: 14px; font-size: 26px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 10px; }
+.login-logo h1 { font-size: 18px; font-weight: 700; color: var(--text); }
+.login-logo p { font-size: 12px; color: var(--text-3); margin-top: 2px; }
+.form-group { margin-bottom: 16px; }
+.form-label { font-size: 12px; color: var(--text-2); font-weight: 500; margin-bottom: 6px; display: block; }
+.form-input {
+  width: 100%; padding: 9px 12px; border: 1px solid var(--border); border-radius: 8px;
+  font-size: 14px; font-family: inherit; outline: none;
+}
+.form-input:focus { border-color: var(--purple); }
+.login-btn {
+  width: 100%; padding: 11px; background: var(--purple); color: #fff; border: none;
+  border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer; font-family: inherit;
+}
+.login-btn:hover { background: var(--purple-d); }
+.login-err { font-size: 13px; color: var(--red); margin-top: 8px; min-height: 18px; }
+
+/* ── Recent users list ── */
+.recent-list { display: flex; flex-direction: column; gap: 6px; }
+.recent-row {
+  display: flex; align-items: center; gap: 10px; padding: 9px 14px;
+  border: 1px solid var(--border); border-radius: 8px; cursor: pointer; background: var(--card);
+}
+.recent-row:hover { background: var(--purple-l); }
+.recent-avatar { width: 32px; height: 32px; border-radius: 50%; background: var(--purple-l); color: var(--purple); font-weight: 700; font-size: 13px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.recent-name { font-size: 13px; font-weight: 600; }
+.recent-meta { font-size: 11px; color: var(--text-3); }
+
+/* ── Empty state ── */
+.empty-state { text-align: center; padding: 40px 20px; color: var(--text-3); font-size: 14px; }
+
+/* ── Persona prompt ── */
+.prompt-box { background: #f7f6ff; border: 1px solid var(--border); border-radius: 8px; padding: 12px; font-size: 11px; font-family: monospace; white-space: pre-wrap; max-height: 300px; overflow-y: auto; line-height: 1.6; }
+
+/* ── Toast ── */
+#toast {
+  position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%);
+  background: #1a1a2e; color: #fff; padding: 10px 20px; border-radius: 8px;
+  font-size: 13px; z-index: 999; opacity: 0; pointer-events: none;
+  transition: opacity .2s;
+}
+#toast.show { opacity: 1; }
+
+/* ── Confirm Dialog ── */
+#confirm-modal .modal { width: 400px; }
+</style>
+</head>
+<body>
+
+<!-- ── Login Screen ── -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="icon">言</div>
+      <h1>替身管理后台</h1>
+      <p>仅限管理员访问</p>
+    </div>
+    <div class="form-group">
+      <label class="form-label">手机号 / 邮箱</label>
+      <input class="form-input" type="text" id="login-id" placeholder="输入账号" autocomplete="username">
+    </div>
+    <div class="form-group">
+      <label class="form-label">密码</label>
+      <input class="form-input" type="password" id="login-pwd" placeholder="输入密码" autocomplete="current-password">
+    </div>
+    <button class="login-btn" onclick="doLogin()">登录</button>
+    <div class="login-err" id="login-err"></div>
+  </div>
+</div>
+
+<!-- ── Main App ── -->
+<div id="app">
+  <div class="layout">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-logo">
+        替身管理后台
+        <span>Admin Panel v0.9</span>
+      </div>
+      <nav class="sidebar-nav">
+        <div class="nav-item active" onclick="showPage('dashboard')" id="nav-dashboard">
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+          仪表盘
+        </div>
+        <div class="nav-item" onclick="showPage('users')" id="nav-users">
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+          用户管理
+        </div>
+        <div class="nav-item" onclick="showPage('avatars')" id="nav-avatars">
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="10" r="3"/><path d="M7 20.662A5 5 0 0 1 12 17a5 5 0 0 1 5 3.662"/></svg>
+          替身数据
+        </div>
+      </nav>
+      <div class="sidebar-user">
+        <b id="admin-name">管理员</b>
+        <button class="logout-btn" onclick="logout()">退出登录</button>
+      </div>
+    </aside>
+
+    <!-- Main -->
+    <div class="main">
+
+      <!-- ── Dashboard Page ── -->
+      <div id="page-dashboard">
+        <div class="page-header">
+          <h1>仪表盘</h1>
+          <button class="btn btn-sm" onclick="loadDashboard()">
+            <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.5"/></svg>
+            刷新
+          </button>
+        </div>
+        <div class="page-body">
+          <div class="stat-grid">
+            <div class="stat-card"><div class="stat-label">注册用户</div><div class="stat-value" id="s-users">—</div></div>
+            <div class="stat-card"><div class="stat-label">替身数量</div><div class="stat-value" id="s-avatars">—</div></div>
+            <div class="stat-card"><div class="stat-label">对话消息</div><div class="stat-value" id="s-msgs">—</div></div>
+            <div class="stat-card"><div class="stat-label">记忆条目</div><div class="stat-value" id="s-mems">—</div></div>
+            <div class="stat-card"><div class="stat-label">上传记录</div><div class="stat-value" id="s-uploads">—</div></div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+            <!-- Recent signups -->
+            <div>
+              <div class="section-h">最近注册用户</div>
+              <div id="recent-users-list" class="recent-list"></div>
+            </div>
+            <!-- 7-day message trend -->
+            <div>
+              <div class="section-h">近7天对话量</div>
+              <div class="table-wrap">
+                <table id="daily-msgs-table">
+                  <thead><tr><th>日期</th><th>消息数</th><th>占比</th></tr></thead>
+                  <tbody id="daily-msgs-body"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Users Page ── -->
+      <div id="page-users" style="display:none">
+        <div class="page-header">
+          <h1>用户管理</h1>
+          <span id="user-total-badge" class="badge badge-type"></span>
+        </div>
+        <div class="page-body">
+          <div class="toolbar">
+            <input class="search-box" id="user-search" placeholder="搜索姓名 / 手机号 / 邮箱…" oninput="debounceUserSearch()" />
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>姓名</th><th>手机号</th><th>邮箱</th>
+                  <th>替身数</th><th>消息数</th>
+                  <th>状态</th><th>注册时间</th><th>操作</th>
+                </tr>
+              </thead>
+              <tbody id="user-tbody"></tbody>
+            </table>
+          </div>
+          <div class="pagination" id="user-pagination"></div>
+        </div>
+      </div>
+
+      <!-- ── Avatars Page ── -->
+      <div id="page-avatars" style="display:none">
+        <div class="page-header">
+          <h1>替身数据</h1>
+          <span id="avatar-total-badge" class="badge badge-type"></span>
+        </div>
+        <div class="page-body">
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>替身名</th><th>关系</th><th>创建人</th>
+                  <th>记忆条目</th><th>上传次数</th><th>对话数</th>
+                  <th>状态</th><th>创建时间</th><th>操作</th>
+                </tr>
+              </thead>
+              <tbody id="avatar-tbody"></tbody>
+            </table>
+          </div>
+          <div class="pagination" id="avatar-pagination"></div>
+        </div>
+      </div>
+
+    </div><!-- /.main -->
+  </div><!-- /.layout -->
+</div><!-- /#app -->
+
+<!-- ── User Detail Modal ── -->
+<div class="modal-backdrop" id="user-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="user-modal-title">用户详情</h2>
+      <button class="modal-close" onclick="closeModal('user-modal')">×</button>
+    </div>
+    <div class="modal-body" id="user-modal-body">
+      <div class="tabs">
+        <div class="tab active" onclick="switchUserTab('info',this)">基本信息</div>
+        <div class="tab" onclick="switchUserTab('avatars',this)">替身列表</div>
+        <div class="tab" onclick="switchUserTab('actions',this)">管理操作</div>
+      </div>
+      <div id="user-tab-info"></div>
+      <div id="user-tab-avatars" style="display:none"></div>
+      <div id="user-tab-actions" style="display:none"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Avatar Detail Modal ── -->
+<div class="modal-backdrop" id="avatar-modal">
+  <div class="modal" style="width:960px">
+    <div class="modal-header">
+      <h2 id="avatar-modal-title">替身详情</h2>
+      <button class="modal-close" onclick="closeModal('avatar-modal')">×</button>
+    </div>
+    <div class="modal-body" id="avatar-modal-body">
+      <div class="tabs">
+        <div class="tab active" onclick="switchAvatarTab('info',this)">角色配置</div>
+        <div class="tab" onclick="switchAvatarTab('uploads',this)">上传记录</div>
+        <div class="tab" onclick="switchAvatarTab('memories',this)">记忆数据</div>
+        <div class="tab" onclick="switchAvatarTab('chat',this)">对话历史</div>
+      </div>
+      <div id="avatar-tab-info"></div>
+      <div id="avatar-tab-uploads" style="display:none"></div>
+      <div id="avatar-tab-memories" style="display:none"></div>
+      <div id="avatar-tab-chat" style="display:none"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Confirm Modal ── -->
+<div class="modal-backdrop" id="confirm-modal">
+  <div class="modal" style="width:400px">
+    <div class="modal-header">
+      <h2 id="confirm-title">确认操作</h2>
+      <button class="modal-close" onclick="closeModal('confirm-modal')">×</button>
+    </div>
+    <div class="modal-body">
+      <p id="confirm-text" style="font-size:14px;line-height:1.7;color:var(--text-2)"></p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('confirm-modal')">取消</button>
+      <button class="btn btn-danger" id="confirm-ok-btn">确认</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<script>
+// ─────────────────────────────────────────────
+// Config & State
+// ─────────────────────────────────────────────
+const API_BASE = '';  // 同域
+let token = localStorage.getItem('admin_token') || '';
+let adminName = localStorage.getItem('admin_name') || '管理员';
+
+let userPage = 1, userSearch = '';
+let avatarPage = 1;
+let currentUserId = null;
+let currentAvatarData = null;
+
+// ─────────────────────────────────────────────
+// API Helper
+// ─────────────────────────────────────────────
+async function api(method, path, body) {
+  const opts = {
+    method,
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+  };
+  if (body) opts.body = JSON.stringify(body);
+  const r = await fetch(API_BASE + path, opts);
+  if (r.status === 401 || r.status === 403) {
+    if (path !== '/api/auth/login') { logout(); return null; }
+  }
+  if (!r.ok && r.status !== 200) {
+    const e = await r.json().catch(() => ({}));
+    throw new Error(e.error || `HTTP ${r.status}`);
+  }
+  return r.json();
+}
+
+// ─────────────────────────────────────────────
+// Auth
+// ─────────────────────────────────────────────
+async function doLogin() {
+  const identifier = document.getElementById('login-id').value.trim();
+  const password   = document.getElementById('login-pwd').value;
+  document.getElementById('login-err').textContent = '';
+  try {
+    const data = await fetch(API_BASE + '/api/auth/login', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ phone: identifier, email: identifier, password }),
+    }).then(r => r.json());
+    if (!data.token) throw new Error(data.error || '登录失败');
+
+    // 验证是否 admin
+    const me = await fetch(API_BASE + '/api/admin/stats', {
+      headers: { 'Authorization': 'Bearer ' + data.token }
+    });
+    if (me.status === 403) throw new Error('该账号无管理员权限');
+
+    token = data.token;
+    adminName = data.display_name || '管理员';
+    localStorage.setItem('admin_token', token);
+    localStorage.setItem('admin_name', adminName);
+    showApp();
+  } catch (e) {
+    document.getElementById('login-err').textContent = e.message;
+  }
+}
+
+function logout() {
+  token = '';
+  localStorage.removeItem('admin_token');
+  localStorage.removeItem('admin_name');
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('login-screen').style.display = 'flex';
+}
+
+document.getElementById('login-pwd').addEventListener('keydown', e => {
+  if (e.key === 'Enter') doLogin();
+});
+
+function showApp() {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  document.getElementById('admin-name').textContent = adminName;
+  showPage('dashboard');
+}
+
+// ─────────────────────────────────────────────
+// Navigation
+// ─────────────────────────────────────────────
+function showPage(p) {
+  ['dashboard','users','avatars'].forEach(name => {
+    document.getElementById('page-' + name).style.display = name === p ? 'block' : 'none';
+    document.getElementById('nav-' + name).classList.toggle('active', name === p);
+  });
+  if (p === 'dashboard') loadDashboard();
+  if (p === 'users')     loadUsers();
+  if (p === 'avatars')   loadAvatarList();
+}
+
+// ─────────────────────────────────────────────
+// Dashboard
+// ─────────────────────────────────────────────
+async function loadDashboard() {
+  try {
+    const d = await api('GET', '/api/admin/stats');
+    if (!d) return;
+    document.getElementById('s-users').textContent   = d.user_count.toLocaleString();
+    document.getElementById('s-avatars').textContent = d.avatar_count.toLocaleString();
+    document.getElementById('s-msgs').textContent    = d.msg_count.toLocaleString();
+    document.getElementById('s-mems').textContent    = d.memory_count.toLocaleString();
+    document.getElementById('s-uploads').textContent = d.upload_count.toLocaleString();
+
+    // Recent users
+    const ul = document.getElementById('recent-users-list');
+    ul.innerHTML = d.recent_users.map(u => `
+      <div class="recent-row" onclick="openUserModal('${u.id}')">
+        <div class="recent-avatar">${(u.display_name||'?')[0]}</div>
+        <div style="flex:1">
+          <div class="recent-name">${esc(u.display_name)}${u.is_admin?'<span class="badge badge-admin" style="margin-left:6px">管理员</span>':''}</div>
+          <div class="recent-meta">${u.phone||u.email||'—'}</div>
+        </div>
+        <div style="font-size:11px;color:var(--text-3)">${fmtDate(u.created_at)}</div>
+      </div>`).join('');
+
+    // Daily msgs
+    const maxCnt = Math.max(...(d.daily_msgs.map(r=>r.cnt)),1);
+    document.getElementById('daily-msgs-body').innerHTML = d.daily_msgs.length
+      ? d.daily_msgs.map(r => `<tr>
+          <td>${r.day}</td>
+          <td><b>${r.cnt}</b></td>
+          <td>
+            <div style="display:flex;align-items:center;gap:6px">
+              <div style="height:6px;border-radius:3px;background:var(--purple);width:${Math.round(r.cnt/maxCnt*80)}px"></div>
+              <span style="font-size:11px;color:var(--text-3)">${Math.round(r.cnt/maxCnt*100)}%</span>
+            </div>
+          </td>
+        </tr>`).join('')
+      : '<tr><td colspan="3" class="empty-state">暂无数据</td></tr>';
+  } catch(e) { toast('加载失败: ' + e.message); }
+}
+
+// ─────────────────────────────────────────────
+// Users
+// ─────────────────────────────────────────────
+let _searchTimer;
+function debounceUserSearch() {
+  clearTimeout(_searchTimer);
+  _searchTimer = setTimeout(() => { userPage = 1; loadUsers(); }, 350);
+}
+
+async function loadUsers() {
+  userSearch = document.getElementById('user-search')?.value.trim() || '';
+  try {
+    const d = await api('GET', `/api/admin/users?q=${encodeURIComponent(userSearch)}&page=${userPage}&limit=20`);
+    if (!d) return;
+    document.getElementById('user-total-badge').textContent = `共 ${d.total} 个用户`;
+
+    const REL_MAP = { active:'active', suspended:'suspended' };
+    document.getElementById('user-tbody').innerHTML = d.users.map(u => `
+      <tr class="clickable" onclick="openUserModal('${u.id}')">
+        <td>
+          ${esc(u.display_name)}
+          ${u.is_admin ? '<span class="badge badge-admin">管理员</span>' : ''}
+        </td>
+        <td>${u.phone||'—'}</td>
+        <td>${u.email||'—'}</td>
+        <td>${u.avatar_count}</td>
+        <td>${u.msg_count}</td>
+        <td><span class="badge badge-${u.status||'active'}">${u.status==='suspended'?'已停用':'正常'}</span></td>
+        <td style="color:var(--text-3)">${fmtDate(u.created_at)}</td>
+        <td onclick="event.stopPropagation()">
+          <button class="btn btn-sm" onclick="openUserModal('${u.id}')">详情</button>
+        </td>
+      </tr>`).join('') || '<tr><td colspan="8" class="empty-state">无结果</td></tr>';
+
+    renderPagination('user-pagination', d.page, d.pages, (p) => { userPage = p; loadUsers(); });
+  } catch(e) { toast('加载失败: ' + e.message); }
+}
+
+// ─────────────────────────────────────────────
+// Avatar List
+// ─────────────────────────────────────────────
+async function loadAvatarList() {
+  try {
+    const d = await api('GET', `/api/admin/avatars?page=${avatarPage}&limit=20`);
+    if (!d) return;
+    document.getElementById('avatar-total-badge').textContent = `共 ${d.total} 个替身`;
+
+    const REL_LABELS = {son:'儿子',daughter:'女儿',father:'父亲',mother:'母亲',boyfriend:'男友',girlfriend:'女友',elder_brother:'哥哥',younger_brother:'弟弟',elder_sister:'姐姐',younger_sister:'妹妹',friend:'朋友',bestie:'闺蜜',custom:'自定义'};
+
+    document.getElementById('avatar-tbody').innerHTML = d.avatars.map(a => `
+      <tr class="clickable" onclick="openAvatarModal('${a.id}')">
+        <td><b>${esc(a.name)}</b></td>
+        <td>${REL_LABELS[a.relationship]||a.relationship}</td>
+        <td>${esc(a.creator_name||'—')} <span style="color:var(--text-3);font-size:11px">${a.creator_phone||''}</span></td>
+        <td>${a.memory_count}</td>
+        <td>${a.upload_count}</td>
+        <td>${a.msg_count}</td>
+        <td><span class="badge badge-${a.status==='active'?'active':'suspended'}">${a.status==='active'?'正常':'已暂停'}</span></td>
+        <td style="color:var(--text-3)">${fmtDate(a.created_at)}</td>
+        <td onclick="event.stopPropagation()">
+          <button class="btn btn-sm" onclick="openAvatarModal('${a.id}')">详情</button>
+        </td>
+      </tr>`).join('') || '<tr><td colspan="9" class="empty-state">无数据</td></tr>';
+
+    renderPagination('avatar-pagination', d.page, d.pages, (p) => { avatarPage = p; loadAvatarList(); });
+  } catch(e) { toast('加载失败: ' + e.message); }
+}
+
+// ─────────────────────────────────────────────
+// User Detail Modal
+// ─────────────────────────────────────────────
+async function openUserModal(userId) {
+  currentUserId = userId;
+  openModal('user-modal');
+  document.getElementById('user-modal-title').textContent = '加载中…';
+  document.getElementById('user-tab-info').innerHTML = '<div style="padding:20px;color:var(--text-3)">加载中…</div>';
+  switchUserTab('info', document.querySelector('#user-modal .tab'));
+
+  try {
+    const d = await api('GET', `/api/admin/users/${userId}`);
+    if (!d) return;
+    const u = d.user;
+    document.getElementById('user-modal-title').textContent = u.display_name;
+
+    // Info tab
+    document.getElementById('user-tab-info').innerHTML = `
+      <div class="info-grid" style="margin-bottom:18px">
+        <div class="info-row"><div class="info-label">用户ID</div><div class="info-val" style="font-size:11px;font-family:monospace">${u.id}</div></div>
+        <div class="info-row"><div class="info-label">昵称</div><div class="info-val">${esc(u.display_name)}</div></div>
+        <div class="info-row"><div class="info-label">手机号</div><div class="info-val">${u.phone||'—'}</div></div>
+        <div class="info-row"><div class="info-label">邮箱</div><div class="info-val">${u.email||'—'}</div></div>
+        <div class="info-row"><div class="info-label">状态</div><div class="info-val"><span class="badge badge-${u.status||'active'}">${u.status==='suspended'?'已停用':'正常'}</span></div></div>
+        <div class="info-row"><div class="info-label">权限</div><div class="info-val">${u.is_admin?'<span class="badge badge-admin">管理员</span>':'普通用户'}</div></div>
+        <div class="info-row"><div class="info-label">注册时间</div><div class="info-val">${fmtDate(u.created_at)}</div></div>
+        <div class="info-row"><div class="info-label">第三方绑定</div><div class="info-val">${d.identities.map(i=>`${i.platform}`).join(', ')||'—'}</div></div>
+      </div>`;
+
+    // Avatars tab
+    const REL_LABELS = {son:'儿子',daughter:'女儿',father:'父亲',mother:'母亲',boyfriend:'男友',girlfriend:'女友',elder_brother:'哥哥',younger_brother:'弟弟',elder_sister:'姐姐',younger_sister:'妹妹',friend:'朋友',bestie:'闺蜜',custom:'自定义'};
+    document.getElementById('user-tab-avatars').innerHTML = d.avatars.length
+      ? d.avatars.map(a => `
+        <div class="upload-card" style="margin-bottom:10px;cursor:pointer" onclick="closeModal('user-modal');openAvatarModal('${a.id}')">
+          <div class="upload-head">
+            <div>
+              <b>${esc(a.name)}</b>
+              <span class="badge badge-type" style="margin-left:8px">${REL_LABELS[a.relationship]||a.relationship}</span>
+            </div>
+            <div style="font-size:12px;color:var(--text-3)">
+              记忆${a.memory_count} · 上传${a.upload_count} · 消息${a.msg_count}
+            </div>
+          </div>
+        </div>`).join('')
+      : '<div class="empty-state">该用户尚未创建替身</div>';
+
+    // Actions tab
+    document.getElementById('user-tab-actions').innerHTML = `
+      <div style="display:flex;flex-direction:column;gap:16px;max-width:420px">
+        <div class="card card-body">
+          <div class="section-h" style="margin-bottom:10px">重置密码</div>
+          <div style="display:flex;gap:10px;align-items:center">
+            <input class="form-input" id="reset-pwd-input" placeholder="新密码（≥6位）" type="password" style="flex:1">
+            <button class="btn btn-primary" onclick="doResetPassword('${u.id}')">确认重置</button>
+          </div>
+        </div>
+        <div class="card card-body">
+          <div class="section-h" style="margin-bottom:6px">${u.status==='suspended'?'启用账号':'停用账号'}</div>
+          <p style="font-size:13px;color:var(--text-2);margin-bottom:12px">
+            ${u.status==='suspended'?'恢复该用户的登录和使用权限。':'停用后该用户无法登录，数据不会删除。'}
+          </p>
+          <button class="btn ${u.status==='suspended'?'btn-primary':'btn-danger'}" onclick="doToggleSuspend('${u.id}','${u.status||'active'}')">
+            ${u.status==='suspended'?'启用该用户':'停用该用户'}
+          </button>
+        </div>
+        <div class="card card-body">
+          <div class="section-h" style="margin-bottom:6px;color:var(--red)">删除账号</div>
+          <p style="font-size:13px;color:var(--text-2);margin-bottom:12px">永久删除该用户及其所有替身、记忆、对话数据，不可恢复。</p>
+          <button class="btn btn-danger" onclick="doDeleteUser('${u.id}','${esc(u.display_name)}')">删除该用户</button>
+        </div>
+      </div>`;
+  } catch(e) { toast('加载失败: ' + e.message); }
+}
+
+function switchUserTab(name, el) {
+  ['info','avatars','actions'].forEach(t => document.getElementById('user-tab-'+t).style.display = t===name?'block':'none');
+  document.querySelectorAll('#user-modal .tab').forEach(t => t.classList.remove('active'));
+  if (el) el.classList.add('active');
+}
+
+// ─────────────────────────────────────────────
+// Avatar Detail Modal
+// ─────────────────────────────────────────────
+async function openAvatarModal(avatarId) {
+  currentAvatarData = null;
+  openModal('avatar-modal');
+  document.getElementById('avatar-modal-title').textContent = '加载中…';
+  switchAvatarTab('info', document.querySelector('#avatar-modal .tab'));
+
+  try {
+    const d = await api('GET', `/api/admin/avatars/${avatarId}`);
+    if (!d) return;
+    currentAvatarData = d;
+    const a = d.avatar;
+    document.getElementById('avatar-modal-title').textContent = `${a.name} · 替身详情`;
+
+    const REL_LABELS = {son:'儿子',daughter:'女儿',father:'父亲',mother:'母亲',boyfriend:'男友',girlfriend:'女友',elder_brother:'哥哥',younger_brother:'弟弟',elder_sister:'姐姐',younger_sister:'妹妹',friend:'朋友',bestie:'闺蜜',custom:'自定义'};
+
+    // Info tab
+    document.getElementById('avatar-tab-info').innerHTML = `
+      <div class="info-grid" style="margin-bottom:18px">
+        <div class="info-row"><div class="info-label">替身ID</div><div class="info-val" style="font-size:11px;font-family:monospace">${a.id}</div></div>
+        <div class="info-row"><div class="info-label">名称</div><div class="info-val">${esc(a.name)}</div></div>
+        <div class="info-row"><div class="info-label">关系类型</div><div class="info-val">${REL_LABELS[a.relationship]||a.relationship}</div></div>
+        <div class="info-row"><div class="info-label">对方角色</div><div class="info-val">${a.counterpart_role||'—'}</div></div>
+        <div class="info-row"><div class="info-label">我叫对方</div><div class="info-val">${a.address_to_other||'—'}</div></div>
+        <div class="info-row"><div class="info-label">对方叫我</div><div class="info-val">${a.address_from_other||'—'}</div></div>
+        <div class="info-row"><div class="info-label">创建人</div><div class="info-val">${esc(a.creator_name||'—')}</div></div>
+        <div class="info-row"><div class="info-label">平均回复字数</div><div class="info-val">${a.avg_reply_chars||0} 字</div></div>
+        <div class="info-row"><div class="info-label">状态</div><div class="info-val"><span class="badge badge-${a.status==='active'?'active':'suspended'}">${a.status}</span></div></div>
+        <div class="info-row"><div class="info-label">创建时间</div><div class="info-val">${fmtDate(a.created_at)}</div></div>
+      </div>
+      ${a.identity_desc ? `<div style="margin-bottom:14px"><div class="info-label" style="margin-bottom:6px">人设描述</div><div style="font-size:13px;line-height:1.7;background:#f7f6ff;padding:10px 14px;border-radius:8px">${esc(a.identity_desc)}</div></div>` : ''}
+      ${a.style_profile ? `<div style="margin-bottom:14px"><div class="info-label" style="margin-bottom:6px">风格档案 <small>(LLM提取)</small></div><div style="font-size:13px;line-height:1.7;background:#f7f6ff;padding:10px 14px;border-radius:8px">${esc(a.style_profile)}</div></div>` : ''}
+      ${a.persona_prompt ? `
+        <div>
+          <div class="collapse-toggle" onclick="toggleCollapse('prompt-body')">
+            <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+            展开 System Prompt（${a.persona_prompt.length} 字符）
+          </div>
+          <div class="collapse-body" id="prompt-body">
+            <div class="prompt-box">${esc(a.persona_prompt)}</div>
+          </div>
+        </div>` : ''}`;
+
+    // Uploads tab
+    renderUploadsTab(d);
+
+    // Memories tab
+    renderMemoriesTab(d);
+
+    // Chat tab
+    renderChatTab(d);
+
+  } catch(e) { toast('加载失败: ' + e.message); }
+}
+
+function renderUploadsTab(d) {
+  const jobs = d.jobs || [], uploads = d.uploads || [];
+  let html = '';
+
+  if (jobs.length) {
+    html += `<div class="section-h">导入任务 <small>${jobs.length} 条</small></div>`;
+    html += '<div class="table-wrap" style="margin-bottom:20px"><table><thead><tr><th>文件名</th><th>状态</th><th>消息数</th><th>导入数</th><th>日期范围</th><th>时间</th></tr></thead><tbody>';
+    html += jobs.map(j => `<tr>
+      <td>${esc(j.filename)}</td>
+      <td><span class="badge badge-${j.status==='done'?'active':j.status==='failed'?'suspended':'type'}">${j.status}</span></td>
+      <td>${j.total_msgs}</td>
+      <td>${j.imported}</td>
+      <td style="font-size:11px;color:var(--text-3)">${j.date_start||''} ~ ${j.date_end||''}</td>
+      <td style="color:var(--text-3)">${fmtDate(j.created_at)}</td>
+    </tr>`).join('');
+    html += '</tbody></table></div>';
+  }
+
+  if (uploads.length) {
+    html += `<div class="section-h">原始上传文本 <small>${uploads.length} 条</small></div>`;
+    html += uploads.map(u => `
+      <div class="upload-card">
+        <div class="upload-head" onclick="toggleUpload('up-${u.id}')">
+          <div>
+            <b>${esc(u.filename||'粘贴文本')}</b>
+            <span class="badge badge-type" style="margin-left:6px">${u.file_type}</span>
+          </div>
+          <div style="font-size:11px;color:var(--text-3)">${u.char_count.toLocaleString()} 字符 · ${fmtDate(u.created_at)}</div>
+        </div>
+        <div class="upload-body" id="up-${u.id}">
+          <div style="margin-bottom:6px;color:var(--text-3)">内容预览（前200字）：</div>
+          <div class="upload-preview">${esc(u.content_preview||'')}</div>
+        </div>
+      </div>`).join('');
+  }
+
+  if (!jobs.length && !uploads.length) html = '<div class="empty-state">暂无上传记录</div>';
+  document.getElementById('avatar-tab-uploads').innerHTML = html;
+}
+
+function renderMemoriesTab(d) {
+  const mems = d.memories || [];
+  if (!mems.length) {
+    document.getElementById('avatar-tab-memories').innerHTML = '<div class="empty-state">暂无记忆数据</div>';
+    return;
+  }
+  const byType = {};
+  mems.forEach(m => { (byType[m.mem_type] = byType[m.mem_type]||[]).push(m); });
+  const TYPE_LABELS = {episode:'事件记忆',opinion:'观点喜好',style:'说话风格',wechat:'微信记录'};
+  let html = `<div style="margin-bottom:10px;font-size:12px;color:var(--text-3)">共 ${mems.length} 条记忆</div>`;
+  Object.entries(byType).forEach(([type, items]) => {
+    html += `<div class="section-h" style="margin-top:16px">${TYPE_LABELS[type]||type} <small>${items.length} 条</small></div>`;
+    html += items.map(m => {
+      const tags = (() => { try { return JSON.parse(m.topic_tags||'[]'); } catch { return []; } })();
+      return `<div class="mem-item">
+        <div class="mem-meta">
+          ${tags.map(t=>`<span class="badge badge-type">${esc(t)}</span>`).join('')}
+          <span>${m.source}</span>
+          ${m.priority?'<span class="badge badge-admin">手动</span>':''}
+          ${m.chat_date?`<span>${m.chat_date}</span>`:''}
+        </div>
+        <div class="mem-content">${esc(m.content)}</div>
+      </div>`;
+    }).join('');
+  });
+  document.getElementById('avatar-tab-memories').innerHTML = html;
+}
+
+function renderChatTab(d) {
+  const chats = d.chats || [];
+  if (!chats.length) {
+    document.getElementById('avatar-tab-chat').innerHTML = '<div class="empty-state">暂无对话记录</div>';
+    return;
+  }
+
+  let lastReceiver = null;
+  let html = `<div style="margin-bottom:10px;font-size:12px;color:var(--text-3)">显示最近 ${chats.length} 条（共更多请在数据库查询）</div>`;
+  html += '<div style="max-width:700px">';
+  chats.forEach(c => {
+    const isUser = c.role === 'user';
+    if (isUser && c.receiver_name && c.receiver_name !== lastReceiver) {
+      lastReceiver = c.receiver_name;
+      html += `<div style="text-align:center;font-size:11px;color:var(--text-3);margin:10px 0 6px">— ${esc(c.receiver_name)} —</div>`;
+    }
+    html += `<div class="chat-msg ${isUser?'user':'bot'}">
+      <div class="chat-avatar-icon">${isUser ? (c.receiver_name||'用')[0] : '替'}</div>
+      <div>
+        <div class="chat-bubble">${esc(c.content).replace(/\n/g,'<br>')}</div>
+        <div class="chat-meta">${fmtTime(c.created_at)}</div>
+      </div>
+    </div>`;
+  });
+  html += '</div>';
+  document.getElementById('avatar-tab-chat').innerHTML = html;
+}
+
+function switchAvatarTab(name, el) {
+  ['info','uploads','memories','chat'].forEach(t => document.getElementById('avatar-tab-'+t).style.display = t===name?'block':'none');
+  document.querySelectorAll('#avatar-modal .tab').forEach(t => t.classList.remove('active'));
+  if (el) el.classList.add('active');
+}
+
+function toggleUpload(id) {
+  const el = document.getElementById(id);
+  el.classList.toggle('open');
+}
+
+function toggleCollapse(id) {
+  const el = document.getElementById(id);
+  el.classList.toggle('open');
+}
+
+// ─────────────────────────────────────────────
+// User Actions
+// ─────────────────────────────────────────────
+async function doResetPassword(userId) {
+  const pwd = document.getElementById('reset-pwd-input').value;
+  if (!pwd || pwd.length < 6) { toast('密码至少6位'); return; }
+  try {
+    await api('POST', `/api/admin/users/${userId}/reset_password`, { password: pwd });
+    toast('密码已重置');
+    document.getElementById('reset-pwd-input').value = '';
+  } catch(e) { toast('操作失败: ' + e.message); }
+}
+
+async function doToggleSuspend(userId, currentStatus) {
+  const action = currentStatus === 'suspended' ? '启用' : '停用';
+  confirm2(`确认${action}该用户？`, async () => {
+    try {
+      const d = await api('POST', `/api/admin/users/${userId}/toggle_suspend`);
+      toast(`已${action}用户`);
+      closeModal('user-modal');
+      loadUsers();
+    } catch(e) { toast('操作失败: ' + e.message); }
+  });
+}
+
+async function doDeleteUser(userId, name) {
+  confirm2(`永久删除用户「${name}」及其所有数据？此操作不可撤销。`, async () => {
+    try {
+      await api('DELETE', `/api/admin/users/${userId}`);
+      toast('已删除用户');
+      closeModal('user-modal');
+      loadUsers();
+      loadDashboard();
+    } catch(e) { toast('操作失败: ' + e.message); }
+  });
+}
+
+// ─────────────────────────────────────────────
+// Modal helpers
+// ─────────────────────────────────────────────
+function openModal(id) { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+// Close on backdrop click
+document.querySelectorAll('.modal-backdrop').forEach(el => {
+  el.addEventListener('click', e => { if (e.target === el) closeModal(el.id); });
+});
+
+// ─────────────────────────────────────────────
+// Confirm dialog
+// ─────────────────────────────────────────────
+function confirm2(text, onOk) {
+  document.getElementById('confirm-text').textContent = text;
+  document.getElementById('confirm-ok-btn').onclick = () => { closeModal('confirm-modal'); onOk(); };
+  openModal('confirm-modal');
+}
+
+// ─────────────────────────────────────────────
+// Pagination
+// ─────────────────────────────────────────────
+function renderPagination(containerId, page, pages, onPage) {
+  const el = document.getElementById(containerId);
+  if (pages <= 1) { el.innerHTML = ''; return; }
+  let html = `<button class="page-btn" ${page<=1?'disabled':''} onclick="(${onPage.toString()})(${page-1})">‹</button>`;
+  const start = Math.max(1, page-2), end = Math.min(pages, page+2);
+  for (let i = start; i <= end; i++) {
+    html += `<button class="page-btn ${i===page?'active':''}" onclick="(${onPage.toString()})(${i})">${i}</button>`;
+  }
+  html += `<button class="page-btn" ${page>=pages?'disabled':''} onclick="(${onPage.toString()})(${page+1})">›</button>`;
+  html += `<span class="page-info">第 ${page} / ${pages} 页</span>`;
+  el.innerHTML = html;
+}
+
+// ─────────────────────────────────────────────
+// Utils
+// ─────────────────────────────────────────────
+function esc(s) {
+  if (!s) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function fmtDate(s) {
+  if (!s) return '—';
+  return s.replace('T',' ').slice(0, 16);
+}
+function fmtTime(s) {
+  if (!s) return '';
+  return s.replace('T',' ').slice(0,16);
+}
+
+let _toastTimer;
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => el.classList.remove('show'), 2500);
+}
+
+// ─────────────────────────────────────────────
+// Init
+// ─────────────────────────────────────────────
+if (token) {
+  showApp();
+} else {
+  document.getElementById('login-screen').style.display = 'flex';
+}
+</script>
+</body>
+</html>
