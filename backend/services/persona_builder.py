@@ -239,12 +239,18 @@ def build_system_prompt(
     )
 
     # 回复字数规则（有统计数据才注入）
-    reply_length_rule = (
-        f"- 【回复长度】你平时聊天非常简短，平均一条消息约 {avg_reply_chars} 个字。"
-        "除非对方问了需要详细解释的问题，否则保持简短，不要写大段文字。"
-        if avg_reply_chars >= 2 else
-        "- 回复简洁自然，像真实对话，不要长篇大论"
-    )
+    if avg_reply_chars >= 2:
+        hard_cap = max(avg_reply_chars * 2, 30)
+        reply_length_rule = (
+            f"- 【回复长度 — 硬性规定，必须遵守】根据真实聊天记录，你每条消息平均约 {avg_reply_chars} 个字。"
+            f"除非对方明确要求详细解释，每条回复不得超过 {hard_cap} 个字。"
+            "超过这个长度会让你显得像机器人而不是真人，绝对不允许。"
+        )
+    else:
+        reply_length_rule = (
+            "- 【回复长度 — 硬性规定，必须遵守】每条回复必须简短，通常一两句话，最多三句，"
+            "绝对不写大段文字，否则会显得像机器人"
+        )
 
     # 时间情境（每次对话实时生成）
     time_context = _time_context_hint()
@@ -265,6 +271,7 @@ def build_system_prompt(
 {template['avoid']}
 {reply_length_rule}
 - 可以用 emoji 增加亲切感，比如 😊 😄 ❤️ 😘 😭 💪 👍，但要自然，不要每句都加
+- 【禁止括号动作描写 — 硬性规定】绝对不能用括号描写动作或表情，如「（笑了笑）」「（轻声道）」「（叹气）」「（沉默片刻）」——真实聊天中没人这样写，这是 AI 最明显的暴露特征
 - 【禁止编造】：不能编造具体事实（地点、金额、日期、人名等），没有依据就用模糊表达
 {unknown_topic_rule}
 - 永远不要承认自己是 AI 或机器人

@@ -1,8 +1,8 @@
 # 替身 (Shuangshen) 系统架构文档
 
-**版本：** v0.6  
-**更新日期：** 2026-06-30  
-**状态：** v0.5 已实现；v0.6 Chroma 向量库已接入
+**版本：** v0.7  
+**更新日期：** 2026-07-04  
+**状态：** v0.6 Chroma 向量库已接入；v0.7 管理后台 + 对话质量优化
 
 ---
 
@@ -16,6 +16,7 @@
 | v0.4 | 2025 | 多关系类型、identity_desc、多文件导入、HTML 解析、记忆去重 |
 | v0.5 | 2026-06 | 风格档案、向量检索（SQLite）、记忆优先级、原始数据存储、时间情景注入 |
 | v0.6 | 2026-06 | 向量库迁移至 Chroma；双写存储架构；记忆 chat_date；导入日期范围追踪；新增微信长按复制格式解析 |
+| v0.7 | 2026-07 | 微信手机号登录（两步认证）；管理后台（admin.py + admin.html）；移除安全硬拦截；回复字数强制约束 + 禁括号动作描写；max_tokens→2000；style_profile 显式捕捉消息长度 |
 
 ---
 
@@ -217,7 +218,8 @@ chat_date（NULL） →  展示 created_at（记录导入时间）
     │
     ▼
 ① 话题检测（topic_guard.py）
-   全局敏感话题 → 生成 topic_hints 字符串
+   命中预设话题 → 生成 topic_hints 字符串注入 System Prompt（不再硬拦截）
+   注：安全硬拦截已在 v0.7 移除（产品定位为熟人通信，无金融欺诈场景）
     │
     ▼
 ② 记忆检索（memory_store.search_memories）
@@ -238,13 +240,14 @@ chat_date（NULL） →  展示 created_at（记录导入时间）
    │ 【说话风格档案】— style_profile ≤300字        │
    │ 【人设背景】— identity_desc（用户手写）       │
    │ 【人格分析】— persona_prompt（LLM摘要）       │
-   │ 【回复长度规则】— avg_reply_chars             │
-   │ 【时间情景提示】— 当前时段（凌晨/早上/…）    │
-   │ （可选）敏感话题提示                          │
-   └──────────────────────────────────────────────┘
+   │ 【回复长度规则】— avg_reply_chars（硬性上限：均值×2，违反即暴露AI）│
+   │ 【禁括号动作描写】— 禁止「（笑了笑）」等括号表情/动作           │
+   │ 【时间情景提示】— 当前时段（凌晨/早上/…）                       │
+   │ （可选）敏感话题提示                                             │
+   └─────────────────────────────────────────────────────────────────┘
     │
     ▼
-④ 调用 DeepSeek Chat API
+④ 调用 DeepSeek Chat API（max_tokens=2000，temperature=0.75）
     │
     ▼
 ⑤ 返回回复，写入 chat_messages 表（SQLite）
@@ -360,6 +363,8 @@ raw_uploads.processed_at ← NULL = 尚未处理 / 待重处理
 ```
 POST /api/auth/register
 POST /api/auth/login
+POST /api/auth/wechat            微信静默登录（返回 token 或 need_phone:true）
+POST /api/auth/wechat_phone      微信手机号授权注册（两步认证第二步）
 
 GET/POST  /api/avatars               创建/列出替身
 GET/PUT   /api/avatars/:id           详情/更新
@@ -382,7 +387,21 @@ GET/POST  /api/topics                全局敏感话题
 GET    /api/memories/:id             查看记忆库
 POST   /api/memories/:id             手动添加记忆（priority=1）
 DELETE /api/memories/:id/:mem_id     删除记忆
+
+GET  /api/admin/stats                        统计概览（用户数/角色数/消息数 + 7日趋势）
+GET  /api/admin/users?q=&page=               用户列表（可搜索分页）
+GET  /api/admin/users/:id                    用户详情 + 替身列表
+POST /api/admin/users/:id/reset_password     重置密码
+POST /api/admin/users/:id/toggle_suspend     停用/启用
+DELETE /api/admin/users/:id                  删除用户全部数据
+GET  /api/admin/avatars                      所有替身列表
+GET  /api/admin/avatars/:id                  替身详情（配置/上传/记忆/对话）
+GET  /api/admin/avatars/:id/chat             替身对话历史（分页）
 ```
+
+### 管理后台认证
+
+管理后台使用 `require_admin` 装饰器，在 JWT 认证基础上额外校验 `users.is_admin = 1`。Web 页面入口为 `/admin`（服务 `frontend/admin.html`）。
 
 ---
 

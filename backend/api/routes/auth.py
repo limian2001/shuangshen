@@ -168,11 +168,22 @@ def login():
     if not identifier or not password:
         return jsonify({"error": "账号和密码不能为空"}), 400
 
+    # 兼容手机号有无 +86 前缀（管理员手动创建账号时可能格式不统一）
+    candidates = [identifier]
+    if identifier.startswith("+86"):
+        candidates.append(identifier[3:])   # +8613xxx → 13xxx
+    elif identifier.lstrip("0").isdigit():
+        candidates.append("+86" + identifier)  # 13xxx → +8613xxx
+
     with get_db() as conn:
-        user = row_to_dict(conn.execute(
-            "SELECT * FROM users WHERE phone = ? OR email = ?",
-            (identifier, identifier),
-        ).fetchone())
+        user = None
+        for cand in candidates:
+            user = row_to_dict(conn.execute(
+                "SELECT * FROM users WHERE phone = ? OR email = ?",
+                (cand, cand),
+            ).fetchone())
+            if user:
+                break
 
     if not user or not _verify_password(password, user["password_hash"]):
         return jsonify({"error": "账号或密码错误"}), 401
