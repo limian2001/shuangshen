@@ -210,6 +210,11 @@ def _run_migrations(conn: sqlite3.Connection):
             UNIQUE(platform, external_id)
         )""",
         "CREATE INDEX IF NOT EXISTS idx_user_identities_user ON user_identities(user_id)",
+        # v0.8: 关系扩展 — 对方角色、称呼、自定义关系名
+        "ALTER TABLE avatars ADD COLUMN counterpart_role TEXT DEFAULT ''",
+        "ALTER TABLE avatars ADD COLUMN address_to_other TEXT DEFAULT ''",
+        "ALTER TABLE avatars ADD COLUMN address_from_other TEXT DEFAULT ''",
+        "ALTER TABLE avatars ADD COLUMN custom_rel_name TEXT DEFAULT ''",
     ]
     for sql in migrations:
         try:

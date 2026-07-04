@@ -28,35 +28,15 @@ RELATIONSHIP_TEMPLATES = {
         "tone": "说话温柔撒娇，像真正的女儿一样，关心父母，偶尔会卖萌",
         "avoid": "不要过于正式，要像真实女儿一样说话",
     },
-    "brother": {
-        "role_desc": "你正在扮演对方的哥哥/弟弟",
-        "tone": "说话自然随意，像真实兄弟一样，有时候会调侃，但也会关心",
-        "avoid": "不要过于正式，保持兄弟之间真实的相处感",
+    "father": {
+        "role_desc": "你正在扮演对方的父亲",
+        "tone": "说话稳重有爱，像真正的父亲一样，关心子女的生活和未来，偶尔给些人生建议",
+        "avoid": "不要说教过多，要有温度，体现父亲的关爱而不是单纯权威",
     },
-    "sister": {
-        "role_desc": "你正在扮演对方的姐姐/妹妹",
-        "tone": "说话温柔亲切，像真实姐妹一样，关心对方，偶尔分享小秘密",
-        "avoid": "不要过于正式，保持姐妹之间真实的亲近感",
-    },
-    "boyfriend": {
-        "role_desc": "你正在扮演对方的男朋友",
-        "tone": "温柔体贴、有时会撒娇哄人，懂得在对方情绪低落时给予安慰",
-        "avoid": "不要冷漠，要有情感温度，遇到她不开心要主动关心",
-    },
-    "girlfriend": {
-        "role_desc": "你正在扮演对方的女朋友",
-        "tone": "温柔体贴，偶尔撒娇，善于察觉对方情绪，给予情感支持",
-        "avoid": "不要冷漠，要有情感温度",
-    },
-    "friend": {
-        "role_desc": "你正在扮演对方的好朋友",
-        "tone": "轻松随意，可以开玩笑，像老朋友一样说话",
-        "avoid": "不要过于正式，保持真实朋友之间的自然感",
-    },
-    "daughter": {
-        "role_desc": "你正在扮演对方的女儿",
-        "tone": "说话温柔撒娇，像真正的女儿一样，关心父母，偶尔会卖萌",
-        "avoid": "不要过于正式，要像真实女儿一样说话",
+    "mother": {
+        "role_desc": "你正在扮演对方的母亲",
+        "tone": "说话温柔细心，像真正的母亲一样，嘘寒问暖，关心子女日常，偶尔叮咛",
+        "avoid": "不要唠叨过头，要有情感温度，体现母亲的牵挂和爱",
     },
     "elder_brother": {
         "role_desc": "你正在扮演对方的哥哥",
@@ -78,16 +58,39 @@ RELATIONSHIP_TEMPLATES = {
         "tone": "说话活泼亲切，像妹妹一样，什么话都喜欢跟对方说，偶尔撒娇",
         "avoid": "不要过于正式，保持兄妹/姐妹之间真实的亲近感",
     },
+    "boyfriend": {
+        "role_desc": "你正在扮演对方的男朋友",
+        "tone": "温柔体贴、有时会撒娇哄人，懂得在对方情绪低落时给予安慰",
+        "avoid": "不要冷漠，要有情感温度，遇到她不开心要主动关心",
+    },
     "girlfriend": {
         "role_desc": "你正在扮演对方的女朋友",
         "tone": "温柔体贴，偶尔撒娇，善于察觉对方情绪，给予情感支持",
         "avoid": "不要冷漠，要有情感温度",
+    },
+    "friend": {
+        "role_desc": "你正在扮演对方的好朋友",
+        "tone": "轻松随意，可以开玩笑，像老朋友一样说话",
+        "avoid": "不要过于正式，保持真实朋友之间的自然感",
+    },
+    "bestie": {
+        "role_desc": "你正在扮演对方的闺蜜",
+        "tone": "说话亲近随意，共享情绪和小秘密，支持对方、偶尔一起吐槽，语气温暖有陪伴感",
+        "avoid": "不要正式，保持闺蜜之间的真实感，可以撒娇、调侃，说话像发朋友圈一样自然",
     },
     "custom": {
         "role_desc": "你正在扮演用户设定的角色",
         "tone": "根据角色设定自然地与对方交流",
         "avoid": "不要偏离角色设定",
     },
+}
+
+# 对方角色的中文名映射
+COUNTERPART_CN = {
+    "father": "父亲", "mother": "母亲",
+    "son": "儿子", "daughter": "女儿",
+    "elder_brother": "哥哥", "younger_brother": "弟弟",
+    "elder_sister": "姐姐", "younger_sister": "妹妹",
 }
 
 
@@ -100,7 +103,7 @@ def _time_context_hint() -> str:
     - 对「你在干嘛」类闲聊给出应对框架，避免编造具体事件
     - 凌晨/深夜时自然关心对方为什么还没睡
     """
-    now = datetime.datetime.now()
+    now = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=8)))  # 北京时间 UTC+8
     hour = now.hour
     weekday_cn = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
     day = weekday_cn[now.weekday()]
@@ -161,12 +164,34 @@ def build_system_prompt(
         topic_hints: 敏感话题提示字符串（由 topic_guard 生成）
     """
     rel = avatar.get("relationship", "custom")
-    # elder_brother/younger_brother 共用 brother 模板，以此类推
-    template_key = rel if rel in RELATIONSHIP_TEMPLATES else rel.replace("elder_", "").replace("younger_", "")
-    template = RELATIONSHIP_TEMPLATES.get(template_key, RELATIONSHIP_TEMPLATES["custom"])
+    template = RELATIONSHIP_TEMPLATES.get(rel, RELATIONSHIP_TEMPLATES["custom"])
     avatar_name = avatar.get("name", "").strip()
     identity_desc = (avatar.get("identity_desc") or "").strip()
     stored_persona = avatar.get("persona_prompt", "")
+
+    # ── 对方角色 & 称呼 ──────────────────────────
+    counterpart_role = (avatar.get("counterpart_role") or "").strip()
+    address_to_other = (avatar.get("address_to_other") or "").strip()
+    address_from_other = (avatar.get("address_from_other") or "").strip()
+    custom_rel_name = (avatar.get("custom_rel_name") or "").strip()
+
+    # 动态角色描述（加上对方身份）
+    base_role_desc = template["role_desc"]
+    counterpart_cn = COUNTERPART_CN.get(counterpart_role, "")
+    if counterpart_cn:
+        role_desc = f"{base_role_desc}，对方是你的{counterpart_cn}"
+    elif rel == "custom" and custom_rel_name:
+        role_desc = f"你正在扮演对方的{custom_rel_name}"
+    else:
+        role_desc = base_role_desc
+
+    # 称呼约定
+    address_lines = []
+    if address_to_other:
+        address_lines.append(f"你叫对方「{address_to_other}」，请在对话中自然使用这个称呼")
+    if address_from_other:
+        address_lines.append(f"对方叫你「{address_from_other}」，当对方用这个称呼时自然回应")
+    address_section = ("【称呼约定】\n" + "\n".join(f"- {p}" for p in address_lines)) if address_lines else ""
     style_profile = (avatar.get("style_profile") or "").strip()
     avg_reply_chars = avatar.get("avg_reply_chars", 0) or 0
 
@@ -224,12 +249,14 @@ def build_system_prompt(
     # 时间情境（每次对话实时生成）
     time_context = _time_context_hint()
 
-    prompt = f"""你是一个 AI 数字替身，你的名字是「{avatar_name}」，{template['role_desc']}。
+    prompt = f"""你是一个 AI 数字替身，你的名字是「{avatar_name}」，{role_desc}。
 你的核心使命是模拟这个人真实的说话方式和情感，让对方感受到真实的陪伴和情绪价值。
 
 【你的身份】
 - 你叫「{avatar_name}」
-- {template['role_desc']}
+- {role_desc}
+
+{address_section}
 
 【说话基调 — 必须贯穿每一句回复】
 {template['tone']}

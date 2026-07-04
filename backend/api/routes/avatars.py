@@ -11,11 +11,11 @@ from backend.utils.auth import require_auth, new_id
 avatars_bp = Blueprint("avatars", __name__, url_prefix="/api/avatars")
 
 VALID_RELATIONSHIPS = {
-    "son", "daughter",
+    "son", "daughter", "father", "mother",
     "boyfriend", "girlfriend",
     "elder_brother", "younger_brother",
     "elder_sister", "younger_sister",
-    "friend", "custom",
+    "friend", "bestie", "custom",
 }
 
 
@@ -25,7 +25,8 @@ def list_avatars():
     """列出我创建的所有替身"""
     with get_db() as conn:
         rows = rows_to_list(conn.execute(
-            """SELECT id, name, relationship, status, share_code, created_at, updated_at
+            """SELECT id, name, relationship, counterpart_role, address_to_other, address_from_other,
+                      custom_rel_name, status, share_code, created_at, updated_at
                FROM avatars WHERE creator_id = ? AND status != 'deleted'
                ORDER BY created_at DESC""",
             (g.user_id,),
@@ -40,8 +41,11 @@ def create_avatar():
     data = request.get_json() or {}
     name = (data.get("name") or "").strip()
     relationship = data.get("relationship", "custom")
-
     identity_desc = (data.get("identity_desc") or "").strip()
+    counterpart_role = (data.get("counterpart_role") or "").strip()
+    address_to_other = (data.get("address_to_other") or "").strip()
+    address_from_other = (data.get("address_from_other") or "").strip()
+    custom_rel_name = (data.get("custom_rel_name") or "").strip()
 
     if not name:
         return jsonify({"error": "name 不能为空"}), 400
@@ -49,19 +53,26 @@ def create_avatar():
         return jsonify({"error": f"relationship 须为 {VALID_RELATIONSHIPS} 之一"}), 400
 
     aid = new_id()
-    share_code = secrets.token_urlsafe(8)  # 8位随机共享码
+    share_code = secrets.token_urlsafe(8)
 
     with get_db() as conn:
         conn.execute(
-            """INSERT INTO avatars (id, creator_id, name, relationship, identity_desc, share_code)
-               VALUES (?, ?, ?, ?, ?, ?)""",
-            (aid, g.user_id, name, relationship, identity_desc, share_code),
+            """INSERT INTO avatars
+               (id, creator_id, name, relationship, identity_desc, share_code,
+                counterpart_role, address_to_other, address_from_other, custom_rel_name)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (aid, g.user_id, name, relationship, identity_desc, share_code,
+             counterpart_role, address_to_other, address_from_other, custom_rel_name),
         )
 
     return jsonify({
         "id": aid,
         "name": name,
         "relationship": relationship,
+        "counterpart_role": counterpart_role,
+        "address_to_other": address_to_other,
+        "address_from_other": address_from_other,
+        "custom_rel_name": custom_rel_name,
         "identity_desc": identity_desc,
         "share_code": share_code,
         "status": "active",
@@ -108,7 +119,8 @@ def update_avatar(avatar_id):
     data = request.get_json() or {}
     fields = []
     values = []
-    for field in ("name", "status", "identity_desc", "relationship"):
+    for field in ("name", "status", "identity_desc", "relationship",
+                  "counterpart_role", "address_to_other", "address_from_other", "custom_rel_name"):
         if field in data:
             if field == "relationship" and data[field] not in VALID_RELATIONSHIPS:
                 return jsonify({"error": f"relationship 无效"}), 400

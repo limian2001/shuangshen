@@ -6,6 +6,10 @@
 <title>替身 · Shuangshen</title>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+/* test-2026-07-04 */
+/* counterpart toggle buttons */
+.cp-btn { padding: 5px 14px; border-radius: 6px; font-size: 12px; font-weight: 500; cursor: pointer; border: 1px solid var(--border-md); background: var(--bg); color: var(--text-2); font-family: inherit; transition: all .12s; }
+.cp-btn.active { background: var(--purple); color: #fff; border-color: var(--purple); }
 
 :root {
   --bg: #f7f6f3;
@@ -469,11 +473,13 @@ body.is-mobile .row .field   { width: 100%; }
       <div id="create-avatar-card" class="card" style="display:none;margin-bottom:20px">
         <div class="card-title">创建新替身</div>
         <div class="row">
-          <div class="field"><label>替身名称</label><input type="text" id="new-avatar-name" placeholder="如：小王（儿子）"></div>
-          <div class="field"><label>关系类型</label>
+          <div class="field"><label>替身名称</label><input type="text" id="new-avatar-name" placeholder="如：面面（儿子）"></div>
+          <div class="field"><label>我的角色</label>
             <select id="new-avatar-rel" onchange="onRelChange()">
               <option value="son">儿子</option>
               <option value="daughter">女儿</option>
+              <option value="father">父亲</option>
+              <option value="mother">母亲</option>
               <option value="boyfriend">男友</option>
               <option value="girlfriend">女友</option>
               <option value="elder_brother">哥哥</option>
@@ -481,8 +487,31 @@ body.is-mobile .row .field   { width: 100%; }
               <option value="elder_sister">姐姐</option>
               <option value="younger_sister">妹妹</option>
               <option value="friend">朋友</option>
+              <option value="bestie">闺蜜</option>
               <option value="custom">自定义</option>
             </select>
+          </div>
+        </div>
+        <!-- 对方角色（仅部分关系显示） -->
+        <div id="new-counterpart-row" class="field" style="display:none">
+          <label>对方是</label>
+          <div id="new-counterpart-btns" style="display:flex;gap:8px;flex-wrap:wrap"></div>
+          <input type="hidden" id="new-counterpart-role" value="">
+        </div>
+        <!-- 自定义关系名称 -->
+        <div id="new-custom-rel-row" class="field" style="display:none">
+          <label>关系名称</label>
+          <input type="text" id="new-custom-rel-name" placeholder="如：同事、上司、发小、客户">
+        </div>
+        <!-- 称呼设置 -->
+        <div class="row">
+          <div class="field">
+            <label>我叫 TA</label>
+            <input type="text" id="new-address-to" placeholder="如：妈">
+          </div>
+          <div class="field">
+            <label>TA 叫我</label>
+            <input type="text" id="new-address-from" placeholder="如：面面">
           </div>
         </div>
         <div class="field" id="new-avatar-desc-field">
@@ -739,10 +768,12 @@ body.is-mobile .row .field   { width: 100%; }
             <input type="text" id="identity-name" placeholder="如：面面哥哥">
           </div>
           <div class="field">
-            <label>关系类型</label>
+            <label>我的角色</label>
             <select id="identity-rel" onchange="onIdentityRelChange()">
               <option value="son">儿子</option>
               <option value="daughter">女儿</option>
+              <option value="father">父亲</option>
+              <option value="mother">母亲</option>
               <option value="boyfriend">男友</option>
               <option value="girlfriend">女友</option>
               <option value="elder_brother">哥哥</option>
@@ -750,8 +781,31 @@ body.is-mobile .row .field   { width: 100%; }
               <option value="elder_sister">姐姐</option>
               <option value="younger_sister">妹妹</option>
               <option value="friend">朋友</option>
+              <option value="bestie">闺蜜</option>
               <option value="custom">自定义</option>
             </select>
+          </div>
+        </div>
+        <!-- 对方角色 -->
+        <div id="identity-counterpart-row" class="field" style="display:none">
+          <label>对方是</label>
+          <div id="identity-counterpart-btns" style="display:flex;gap:8px;flex-wrap:wrap"></div>
+          <input type="hidden" id="identity-counterpart-role" value="">
+        </div>
+        <!-- 自定义关系名称 -->
+        <div id="identity-custom-rel-row" class="field" style="display:none">
+          <label>关系名称</label>
+          <input type="text" id="identity-custom-rel-name" placeholder="如：同事、上司、发小、客户">
+        </div>
+        <!-- 称呼 -->
+        <div class="row">
+          <div class="field">
+            <label>我叫 TA</label>
+            <input type="text" id="identity-address-to" placeholder="如：妈">
+          </div>
+          <div class="field">
+            <label>TA 叫我</label>
+            <input type="text" id="identity-address-from" placeholder="如：面面">
           </div>
         </div>
         <div class="field">
@@ -825,6 +879,8 @@ let uploadFiles = [];   // 支持多文件
 const REL_PRESETS = {
   son:             "我是你儿子，目前在外地工作/上学，平时比较忙，但经常挂念家里人。说话随意自然，偶尔撒娇，不喜欢太正式的称呼。",
   daughter:        "我是你女儿，目前在外地工作/上学，平时比较忙，但很惦记家里人，时不时喜欢找你聊聊天、撒个娇。",
+  father:          "我是你父亲，关心你的生活和未来，希望你过得好。平时话不多，但有什么需要都可以找我说。",
+  mother:          "我是你母亲，非常挂念你，时时刻刻都在想你过得怎么样，有没有好好吃饭、休息。",
   boyfriend:       "我是你男朋友，很爱你，关心你日常生活和情绪状态。你不开心的时候我会陪着你，会主动问你发生了什么。",
   girlfriend:      "我是你女朋友，很爱你，关心你日常生活和情绪状态。你不开心的时候我会陪着你，偶尔也会撒个娇。",
   elder_brother:   "我是你哥哥，平时话不多，但很关心你。你有什么事情可以跟我说，我会认真听，也会替你出主意。",
@@ -832,8 +888,75 @@ const REL_PRESETS = {
   elder_sister:    "我是你姐姐，关心你，有时候会叮嘱你注意身体、照顾好自己。你有烦心事可以跟我说，我会陪你聊。",
   younger_sister:  "我是你妹妹，跟你关系特别好，什么话都喜欢跟你说，偶尔也找你撒个娇。",
   friend:          "我是你的老朋友，我们认识很久了，相处很自然放松，什么话都能聊，不用顾虑太多。",
+  bestie:          "我是你的闺蜜，什么心里话都跟你说，你开心我就开心，你难过我陪你。平时一起吐槽、分享秘密，超级亲近。",
   custom:          "",
 };
+
+// 对方角色选项（关系 → [{v, l}]）
+const COUNTERPART_OPTIONS = {
+  son:             [{v:'father', l:'父亲'}, {v:'mother', l:'母亲'}],
+  daughter:        [{v:'father', l:'父亲'}, {v:'mother', l:'母亲'}],
+  father:          [{v:'son', l:'儿子'}, {v:'daughter', l:'女儿'}],
+  mother:          [{v:'son', l:'儿子'}, {v:'daughter', l:'女儿'}],
+  elder_brother:   [{v:'younger_brother', l:'弟弟'}, {v:'younger_sister', l:'妹妹'}],
+  younger_brother: [{v:'elder_brother', l:'哥哥'}, {v:'elder_sister', l:'姐姐'}],
+  elder_sister:    [{v:'younger_brother', l:'弟弟'}, {v:'younger_sister', l:'妹妹'}],
+  younger_sister:  [{v:'elder_brother', l:'哥哥'}, {v:'elder_sister', l:'姐姐'}],
+};
+
+// 称呼输入框 placeholder（关系 → {to, from}）
+const ADDRESS_HINTS = {
+  son:             {to:'如：妈、爸', from:'如：面面、宝、儿子'},
+  daughter:        {to:'如：妈、爸', from:'如：宝贝、闺女'},
+  father:          {to:'如：宝贝、儿子、闺女', from:'如：爸、爸爸'},
+  mother:          {to:'如：宝贝、儿子、闺女', from:'如：妈、妈妈'},
+  elder_brother:   {to:'如：弟弟、妹妹', from:'如：哥哥、哥'},
+  younger_brother: {to:'如：哥哥、姐姐', from:'如：弟弟、弟'},
+  elder_sister:    {to:'如：弟弟、妹妹', from:'如：姐姐、姐'},
+  younger_sister:  {to:'如：哥哥、姐姐', from:'如：妹妹、妹'},
+  boyfriend:       {to:'如：宝贝、丽丽', from:'如：宝贝、老公'},
+  girlfriend:      {to:'如：宝贝、亲爱的', from:'如：宝贝、老婆'},
+  friend:          {to:'如：小王、阿华', from:'如：老李'},
+  bestie:          {to:'如：宝子、亲', from:'如：宝子、我的'},
+  custom:          {to:'我怎么叫对方', from:'对方怎么叫我'},
+};
+
+// 更新关系相关动态 UI（prefix: 'new' 或 'identity'）
+function updateRelUI(prefix, rel, savedCounterpart) {
+  // 对方角色
+  const cpOpts = COUNTERPART_OPTIONS[rel] || [];
+  const cpRow = document.getElementById(prefix + '-counterpart-row');
+  const cpBtns = document.getElementById(prefix + '-counterpart-btns');
+  const cpHidden = document.getElementById(prefix + '-counterpart-role');
+  if (cpOpts.length) {
+    cpRow.style.display = 'block';
+    cpBtns.innerHTML = cpOpts.map(o =>
+      `<button class="cp-btn${o.v === (savedCounterpart || cpOpts[0].v) ? ' active' : ''}"
+        onclick="selectCounterpart('${prefix}','${o.v}',this)">${o.l}</button>`
+    ).join('');
+    cpHidden.value = savedCounterpart || cpOpts[0].v;
+  } else {
+    cpRow.style.display = 'none';
+    cpHidden.value = '';
+  }
+
+  // 自定义关系名称
+  const customRow = document.getElementById(prefix + '-custom-rel-row');
+  if (customRow) customRow.style.display = rel === 'custom' ? 'block' : 'none';
+
+  // 称呼 placeholder
+  const hints = ADDRESS_HINTS[rel] || ADDRESS_HINTS.custom;
+  const toEl = document.getElementById(prefix + '-address-to');
+  const fromEl = document.getElementById(prefix + '-address-from');
+  if (toEl) toEl.placeholder = hints.to;
+  if (fromEl) fromEl.placeholder = hints.from;
+}
+
+function selectCounterpart(prefix, val, btn) {
+  document.getElementById(prefix + '-counterpart-role').value = val;
+  btn.closest('#' + prefix + '-counterpart-btns').querySelectorAll('.cp-btn')
+    .forEach(b => b.classList.toggle('active', b === btn));
+}
 
 // ─── 移动端检测（WeChat web-view 中 innerWidth 虚报为 980px，screen.width 才准）──
 (function() {
@@ -1113,24 +1236,31 @@ async function loadAvatars() {
 
 function showCreateAvatar() {
   document.getElementById('create-avatar-card').style.display = 'block';
-  onRelChange(); // 初始化预设描述
+  onRelChange(); // 初始化预设描述 + 动态UI
 }
 function hideCreateAvatar() { document.getElementById('create-avatar-card').style.display = 'none'; }
 
 function onRelChange() {
   const rel = document.getElementById('new-avatar-rel').value;
   const ta = document.getElementById('new-avatar-desc');
-  // 只有当前内容是某个预设（或为空）时才自动填充，不覆盖用户手动输入
   const isPreset = Object.values(REL_PRESETS).includes(ta.value) || ta.value === '';
   if (isPreset) ta.value = REL_PRESETS[rel] || '';
+  updateRelUI('new', rel, '');
 }
 
 async function doCreateAvatar() {
   const name = v('new-avatar-name');
   const rel = v('new-avatar-rel');
   const identity_desc = v('new-avatar-desc').trim();
+  const counterpart_role = document.getElementById('new-counterpart-role')?.value || '';
+  const address_to_other = document.getElementById('new-address-to')?.value.trim() || '';
+  const address_from_other = document.getElementById('new-address-from')?.value.trim() || '';
+  const custom_rel_name = document.getElementById('new-custom-rel-name')?.value.trim() || '';
   if (!name) return toast('请填写替身名称', 'error');
-  const res = await api('POST', '/api/avatars', { name, relationship: rel, identity_desc });
+  const res = await api('POST', '/api/avatars', {
+    name, relationship: rel, identity_desc,
+    counterpart_role, address_to_other, address_from_other, custom_rel_name,
+  });
   if (res.id) {
     toast('替身「' + name + '」创建成功！', 'success');
     hideCreateAvatar();
@@ -1723,10 +1853,16 @@ async function loadIdentity() {
 
   document.getElementById('identity-name').value = data.name || '';
   document.getElementById('identity-desc').value = data.identity_desc || '';
+  document.getElementById('identity-address-to').value = data.address_to_other || '';
+  document.getElementById('identity-address-from').value = data.address_from_other || '';
+  if (document.getElementById('identity-custom-rel-name'))
+    document.getElementById('identity-custom-rel-name').value = data.custom_rel_name || '';
 
-  // 同步 relationship 下拉
+  // 同步 relationship 下拉并更新动态 UI
   const relSel = document.getElementById('identity-rel');
-  if (relSel) relSel.value = data.relationship || 'custom';
+  const rel = data.relationship || 'custom';
+  if (relSel) relSel.value = rel;
+  updateRelUI('identity', rel, data.counterpart_role || '');
 
   // 展示 LLM 生成的风格分析
   const promptEl = document.getElementById('persona-prompt-display');
@@ -1741,11 +1877,11 @@ async function loadIdentity() {
 }
 
 function onIdentityRelChange() {
-  // 只有内容为空或是某个预设时才自动填充
   const rel = document.getElementById('identity-rel').value;
   const ta = document.getElementById('identity-desc');
   const isPreset = ta.value === '' || Object.values(REL_PRESETS).includes(ta.value);
   if (isPreset && REL_PRESETS[rel]) ta.value = REL_PRESETS[rel];
+  updateRelUI('identity', rel, document.getElementById('identity-counterpart-role').value);
 }
 
 async function doSaveIdentity() {
@@ -1753,10 +1889,15 @@ async function doSaveIdentity() {
   const name = document.getElementById('identity-name').value.trim();
   const identity_desc = document.getElementById('identity-desc').value.trim();
   const relationship = document.getElementById('identity-rel').value;
+  const counterpart_role = document.getElementById('identity-counterpart-role')?.value || '';
+  const address_to_other = document.getElementById('identity-address-to')?.value.trim() || '';
+  const address_from_other = document.getElementById('identity-address-from')?.value.trim() || '';
+  const custom_rel_name = document.getElementById('identity-custom-rel-name')?.value.trim() || '';
   if (!name) return toast('名称不能为空', 'error');
 
   const res = await api('PUT', '/api/avatars/' + currentAvatar.id, {
-    name, identity_desc, relationship
+    name, identity_desc, relationship,
+    counterpart_role, address_to_other, address_from_other, custom_rel_name,
   });
   if (!res) return;
 
