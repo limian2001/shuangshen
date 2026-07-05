@@ -2,11 +2,47 @@ from __future__ import annotations
 """
 替身路由：创建 / 查询 / 共享 / 绑定
 """
+import json
 import secrets
 from flask import Blueprint, request, jsonify, g
 
 from backend.db.database import get_db, row_to_dict, rows_to_list
 from backend.utils.auth import require_auth, new_id
+
+
+# ─── 称呼字段辅助：兼容旧单字符串和新 JSON 数组 ───────────────────────────
+def _parse_address(val) -> list[str]:
+    """DB 值 → list，兼容旧字符串和新 JSON 数组"""
+    if not val:
+        return []
+    if isinstance(val, list):
+        return [v.strip() for v in val if str(v).strip()]
+    s = str(val).strip()
+    if s.startswith("["):
+        try:
+            arr = json.loads(s)
+            return [str(v).strip() for v in arr if str(v).strip()]
+        except Exception:
+            pass
+    return [s] if s else []
+
+
+def _serialize_address(val) -> str:
+    """前端传入值 → JSON 字符串存 DB"""
+    items = _parse_address(val)
+    return json.dumps(items[:5], ensure_ascii=False)
+
+
+def _address_api(val) -> list[str]:
+    """DB 值 → API 返回 list"""
+    return _parse_address(val)
+
+
+def _normalize_avatar(d: dict) -> dict:
+    """把 avatar dict 里的称呼字段从 DB 格式转成 API list 格式"""
+    d["address_to_other"] = _address_api(d.get("address_to_other"))
+    d["address_from_other"] = _address_api(d.get("address_from_other"))
+    return d
 
 avatars_bp = Blueprint("avatars", __name__, url_prefix="/api/avatars")
 
@@ -43,8 +79,8 @@ def create_avatar():
     relationship = data.get("relationship", "custom")
     identity_desc = (data.get("identity_desc") or "").strip()
     counterpart_role = (data.get("counterpart_role") or "").strip()
-    address_to_other = (data.get("address_to_other") or "").strip()
-    address_from_other = (data.get("address_from_other") or "").strip()
+    address_to_other = _serialize_address(data.get("address_to_other"))
+    address_from_other = _serialize_address(data.get("address_from_other"))
     custom_rel_name = (data.get("custom_rel_name") or "").strip()
 
     if not name:
@@ -70,8 +106,8 @@ def create_avatar():
         "name": name,
         "relationship": relationship,
         "counterpart_role": counterpart_role,
-        "address_to_other": address_to_other,
-        "address_from_other": address_from_other,
+        "address_to_other": _parse_address(address_to_other),
+        "address_from_other": _parse_address(address_from_other),
         "custom_rel_name": custom_rel_name,
         "identity_desc": identity_desc,
         "share_code": share_code,
@@ -100,7 +136,7 @@ def get_avatar(avatar_id):
         avatar.pop("persona_prompt", None)
         avatar.pop("share_code", None)
 
-    return jsonify(avatar)
+    return jsonify(_normalize_avatar(avatar))
 
 
 @avatars_bp.put("/<avatar_id>")
@@ -124,8 +160,11 @@ def update_avatar(avatar_id):
         if field in data:
             if field == "relationship" and data[field] not in VALID_RELATIONSHIPS:
                 return jsonify({"error": f"relationship 无效"}), 400
+            val = data[field]
+            if field in ("address_to_other", "address_from_other"):
+                val = _serialize_address(val)
             fields.append(f"{field} = ?")
-            values.append(data[field])
+            values.append(val)
 
     if not fields:
         return jsonify({"error": "没有可更新的字段"}), 400
@@ -144,14 +183,34 @@ def update_avatar(avatar_id):
 @avatars_bp.delete("/<avatar_id>")
 @require_auth
 def delete_avatar(avatar_id):
-    """软删除替身（仅创建者，设 status='deleted'）"""
+    """硬删除替身及其全部数据（仅创建者）"""
+    # 验证权限
     with get_db() as conn:
-        cur = conn.execute(
-            "UPDATE avatars SET status='deleted', updated_at=datetime('now') WHERE id=? AND creator_id=?",
+        avatar = conn.execute(
+            "SELECT id FROM avatars WHERE id=? AND creator_id=?",
             (avatar_id, g.user_id),
-        )
-    if cur.rowcount == 0:
+        ).fetchone()
+    if not avatar:
         return jsonify({"error": "替身不存在或无权限"}), 404
+
+    # 清理 Chroma 向量（不影响主流程）
+    try:
+        from backend.services.chroma_store import delete_avatar_memories
+        delete_avatar_memories(avatar_id)
+    except Exception as e:
+        print(f"[DELETE] Chroma 清理失败（继续删除）: {e}")
+
+    # 硬删除所有关联数据 + 替身本体
+    with get_db() as conn:
+        conn.execute("DELETE FROM memories        WHERE avatar_id=?", (avatar_id,))
+        conn.execute("DELETE FROM chat_messages   WHERE avatar_id=?", (avatar_id,))
+        conn.execute("DELETE FROM raw_uploads     WHERE avatar_id=?", (avatar_id,))
+        conn.execute("DELETE FROM ingest_jobs     WHERE avatar_id=?", (avatar_id,))
+        conn.execute("DELETE FROM sensitive_topics WHERE avatar_id=?", (avatar_id,))
+        conn.execute("DELETE FROM avatar_receivers WHERE avatar_id=?", (avatar_id,))
+        conn.execute("DELETE FROM avatars          WHERE id=?",        (avatar_id,))
+
+    print(f"[DELETE] avatar={avatar_id[:8]} 及全部数据已彻底删除")
     return jsonify({"ok": True})
 
 

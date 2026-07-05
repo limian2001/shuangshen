@@ -229,7 +229,6 @@ select { cursor: pointer; }
 .sender-card { border: 2px solid var(--border-md); border-radius: var(--radius); padding: 12px 16px; cursor: pointer; text-align: center; transition: all .15s; min-width: 90px; }
 .sender-card:hover { border-color: var(--purple-mid); background: var(--purple-light); }
 .sender-card.selected { border-color: var(--purple); background: var(--purple-light); }
-.sender-card.guessed { border-style: dashed; border-color: var(--purple-mid); }
 
 /* ══════════════════════════════════════════════════════
    移动端布局
@@ -503,15 +502,17 @@ body.is-mobile .row .field   { width: 100%; }
           <label>关系名称</label>
           <input type="text" id="new-custom-rel-name" placeholder="如：同事、上司、发小、客户">
         </div>
-        <!-- 称呼设置 -->
+        <!-- 称呼设置（多个） -->
         <div class="row">
           <div class="field">
-            <label>我叫 TA</label>
-            <input type="text" id="new-address-to" placeholder="如：妈">
+            <label>我叫 TA <span style="font-size:11px;color:var(--text-3)">最多5个</span></label>
+            <div id="new-address-to-wrap"></div>
+            <button type="button" class="btn btn-secondary btn-sm" style="margin-top:6px;font-size:12px" onclick="addAddrInput('new-address-to-wrap','new')">＋ 添加称呼</button>
           </div>
           <div class="field">
-            <label>TA 叫我</label>
-            <input type="text" id="new-address-from" placeholder="如：面面">
+            <label>TA 叫我 <span style="font-size:11px;color:var(--text-3)">最多5个</span></label>
+            <div id="new-address-from-wrap"></div>
+            <button type="button" class="btn btn-secondary btn-sm" style="margin-top:6px;font-size:12px" onclick="addAddrInput('new-address-from-wrap','new')">＋ 添加称呼</button>
           </div>
         </div>
         <div class="field" id="new-avatar-desc-field">
@@ -667,7 +668,8 @@ body.is-mobile .row .field   { width: 100%; }
 小王  2024年1月1日 09:00  妈你吃饭了没
 妈妈  2024年1月1日 09:01  吃了，你呢
 
-支持分批粘贴，每次 100+ 条均可"></textarea>
+支持分批粘贴，每次 100+ 条均可
+暂时不支持图片语音，复制过来只保留文字部分"></textarea>
           </div>
           <!-- 简洁说明 -->
           <div style="font-size:11px;color:var(--text-3);margin-bottom:12px;line-height:1.7">
@@ -797,15 +799,17 @@ body.is-mobile .row .field   { width: 100%; }
           <label>关系名称</label>
           <input type="text" id="identity-custom-rel-name" placeholder="如：同事、上司、发小、客户">
         </div>
-        <!-- 称呼 -->
+        <!-- 称呼（多个） -->
         <div class="row">
           <div class="field">
-            <label>我叫 TA</label>
-            <input type="text" id="identity-address-to" placeholder="如：妈">
+            <label>我叫 TA <span style="font-size:11px;color:var(--text-3)">最多5个</span></label>
+            <div id="identity-address-to-wrap"></div>
+            <button type="button" class="btn btn-secondary btn-sm" style="margin-top:6px;font-size:12px" onclick="addAddrInput('identity-address-to-wrap','identity')">＋ 添加称呼</button>
           </div>
           <div class="field">
-            <label>TA 叫我</label>
-            <input type="text" id="identity-address-from" placeholder="如：面面">
+            <label>TA 叫我 <span style="font-size:11px;color:var(--text-3)">最多5个</span></label>
+            <div id="identity-address-from-wrap"></div>
+            <button type="button" class="btn btn-secondary btn-sm" style="margin-top:6px;font-size:12px" onclick="addAddrInput('identity-address-from-wrap','identity')">＋ 添加称呼</button>
           </div>
         </div>
         <div class="field">
@@ -903,6 +907,51 @@ const COUNTERPART_OPTIONS = {
   elder_sister:    [{v:'younger_brother', l:'弟弟'}, {v:'younger_sister', l:'妹妹'}],
   younger_sister:  [{v:'elder_brother', l:'哥哥'}, {v:'elder_sister', l:'姐姐'}],
 };
+
+// ─── 多称呼输入组件 ─────────────────────────────────────────────────────────
+function addAddrInput(wrapId, prefix, value = '') {
+  const wrap = document.getElementById(wrapId);
+  if (!wrap) return;
+  if (wrap.querySelectorAll('input').length >= 5) return toast('最多5个称呼', 'error');
+  const row = document.createElement('div');
+  row.style.cssText = 'display:flex;gap:6px;align-items:center;margin-bottom:6px';
+  const inp = document.createElement('input');
+  inp.type = 'text';
+  inp.value = value;
+  inp.style.flex = '1';
+  const hints = ADDRESS_HINTS[_currentRel(prefix)] || ADDRESS_HINTS.custom;
+  inp.placeholder = wrapId.includes('from') ? hints.from : hints.to;
+  const rm = document.createElement('button');
+  rm.type = 'button';
+  rm.textContent = '×';
+  rm.className = 'btn btn-secondary btn-sm';
+  rm.style.cssText = 'padding:0 10px;min-width:32px;flex-shrink:0';
+  rm.onclick = () => row.remove();
+  row.appendChild(inp);
+  row.appendChild(rm);
+  wrap.appendChild(row);
+}
+
+function _currentRel(prefix) {
+  const el = document.getElementById(prefix === 'new' ? 'new-avatar-rel' : prefix + '-rel')
+          || document.getElementById('new-avatar-rel');
+  return el ? el.value : 'custom';
+}
+
+function getAddrValues(wrapId) {
+  const wrap = document.getElementById(wrapId);
+  if (!wrap) return [];
+  return Array.from(wrap.querySelectorAll('input')).map(i => i.value.trim()).filter(Boolean);
+}
+
+function setAddrValues(wrapId, values, prefix) {
+  const wrap = document.getElementById(wrapId);
+  if (!wrap) return;
+  wrap.innerHTML = '';
+  const arr = Array.isArray(values) ? values : (values ? [values] : []);
+  const toShow = arr.length > 0 ? arr : [''];
+  toShow.forEach(v => addAddrInput(wrapId, prefix, v));
+}
 
 // 称呼输入框 placeholder（关系 → {to, from}）
 const ADDRESS_HINTS = {
@@ -1236,6 +1285,9 @@ async function loadAvatars() {
 
 function showCreateAvatar() {
   document.getElementById('create-avatar-card').style.display = 'block';
+  // 初始化称呼输入框（各一个空输入）
+  setAddrValues('new-address-to-wrap', [], 'new');
+  setAddrValues('new-address-from-wrap', [], 'new');
   onRelChange(); // 初始化预设描述 + 动态UI
 }
 function hideCreateAvatar() { document.getElementById('create-avatar-card').style.display = 'none'; }
@@ -1253,8 +1305,8 @@ async function doCreateAvatar() {
   const rel = v('new-avatar-rel');
   const identity_desc = v('new-avatar-desc').trim();
   const counterpart_role = document.getElementById('new-counterpart-role')?.value || '';
-  const address_to_other = document.getElementById('new-address-to')?.value.trim() || '';
-  const address_from_other = document.getElementById('new-address-from')?.value.trim() || '';
+  const address_to_other = getAddrValues('new-address-to-wrap');
+  const address_from_other = getAddrValues('new-address-from-wrap');
   const custom_rel_name = document.getElementById('new-custom-rel-name')?.value.trim() || '';
   if (!name) return toast('请填写替身名称', 'error');
   const res = await api('POST', '/api/avatars', {
@@ -1586,19 +1638,13 @@ async function detectSenders(tab) {
 
 function toggleSender(tab, name) {
   const state = _ingestState[tab];
-  const idx = state.myNames.indexOf(name);
-  if (idx === -1) {
-    state.myNames.push(name);
-  } else {
-    state.myNames.splice(idx, 1);
-  }
-  // 更新卡片高亮
+  // 单选模式：点击任意卡片，立即成为唯一选中项
+  state.myNames = [name];
+  // 清除所有卡片底色，再给选中的加上
   document.querySelectorAll(`[id^="sc-${tab}-"]`).forEach(c => c.classList.remove('selected'));
-  state.myNames.forEach(n => {
-    const card = document.getElementById(`sc-${tab}-${n}`);
-    if (card) card.classList.add('selected');
-  });
-  document.getElementById(`${tab}-confirm-btn`).disabled = state.myNames.length === 0;
+  const card = document.getElementById(`sc-${tab}-${name}`);
+  if (card) card.classList.add('selected');
+  document.getElementById(`${tab}-confirm-btn`).disabled = false;
 }
 
 async function doConfirmedImport(tab) {
@@ -1763,14 +1809,19 @@ async function _runUploadImport(myName) {
 // 旧函数保留为空
 function doUpload() { toast('请先点击「检测发言人」', 'error'); }
 
-// 日期字符串美化：兼容 "2020年11月23日 19:47" 和 "2024-01-01 09:00" 两种格式
+/// 日期字符串美化：兼容 "2020年11月23日 19:47" 和 "2024-01-01 09:00" 两种格式
+// 有完整日期（年月日）→ 显示日期+时间（到分钟）
+// 只有时间（无日期）→ 返回空字符串，不显示
 function _fmtDateRange(ts) {
   if (!ts) return '';
-  // 中文格式：取到"日"即可
-  const zhMatch = ts.match(/(\d{4}年\d{1,2}月\d{1,2}日)/);
-  if (zhMatch) return zhMatch[1];
-  // ISO 格式：取前10位
-  return ts.slice(0, 10);
+  // 中文格式：必须有年月日才算有效日期
+  const zhMatch = ts.match(/(\d{4}年\d{1,2}月\d{1,2}日)(?:\s+(\d{1,2}:\d{2}))?/);
+  if (zhMatch) return zhMatch[1] + (zhMatch[2] ? ' ' + zhMatch[2] : '');
+  // ISO 格式：必须有 YYYY-MM-DD
+  const isoMatch = ts.match(/^(\d{4}-\d{2}-\d{2})(?:[T ](\d{2}:\d{2}))?/);
+  if (isoMatch) return isoMatch[1] + (isoMatch[2] ? ' ' + isoMatch[2] : '');
+  // 纯时间串（无日期）→ 不显示
+  return '';
 }
 
 // 导入结果统一渲染
@@ -1790,7 +1841,7 @@ function _buildImportResult(res) {
     <div class="stat">AI 提取结构化记忆：<span>${s.semantic_memories_extracted}</span> 条</div>
     <div class="stat">合计导入记忆库：<span>${s.total_imported}</span> 条</div>
     ${dupLine}
-    ${s.date_range?.start ? `<div class="stat" style="background:var(--teal-light);border-radius:6px;padding:6px 10px;margin-top:6px">📅 聊天时间范围：<span style="color:var(--teal);font-weight:600">${_fmtDateRange(s.date_range.start)} ~ ${_fmtDateRange(s.date_range.end)||'—'}</span></div>` : ''}
+    ${(()=>{const ds=_fmtDateRange(s.date_range?.start),de=_fmtDateRange(s.date_range?.end);return (ds||de)?`<div class="stat" style="background:var(--teal-light);border-radius:6px;padding:6px 10px;margin-top:6px">📅 聊天时间范围：<span style="color:var(--teal);font-weight:600">${ds||'—'} ~ ${de||'—'}</span></div>`:'';})()}
     ${res.persona_rebuilt ? '<div style="margin-top:8px;font-size:12px;color:var(--teal)">✓ 人格 Prompt 已自动更新</div>' : ''}
     ${errLine}
   </div>`;
@@ -1859,8 +1910,9 @@ async function loadIngestJobs() {
     return;
   }
   el.innerHTML = list.map(j => {
-    const dateRangeHtml = (j.date_start && j.date_end)
-      ? `<div style="margin-top:4px;font-size:12px;color:var(--teal);background:var(--teal-light);display:inline-block;padding:2px 8px;border-radius:4px">📅 ${_fmtDateRange(j.date_start)} ~ ${_fmtDateRange(j.date_end)}</div>`
+    const _ds = _fmtDateRange(j.date_start), _de = _fmtDateRange(j.date_end);
+    const dateRangeHtml = (_ds || _de)
+      ? `<div style="margin-top:4px;font-size:12px;color:var(--teal);background:var(--teal-light);display:inline-block;padding:2px 8px;border-radius:4px">📅 ${_ds || '—'} ~ ${_de || '—'}</div>`
       : '';
     return `<div class="memory-item">
       <span class="mem-type-badge" style="background:${j.status==='done'?'var(--teal-light)':j.status==='failed'?'var(--red-light)':'var(--amber-light)'};color:${j.status==='done'?'var(--teal)':j.status==='failed'?'var(--red)':'var(--amber)'}">${j.status==='done'?'完成':j.status==='failed'?'失败':'处理中'}</span>
@@ -1896,8 +1948,8 @@ async function loadIdentity() {
 
   document.getElementById('identity-name').value = data.name || '';
   document.getElementById('identity-desc').value = data.identity_desc || '';
-  document.getElementById('identity-address-to').value = data.address_to_other || '';
-  document.getElementById('identity-address-from').value = data.address_from_other || '';
+  setAddrValues('identity-address-to-wrap', data.address_to_other || [], 'identity');
+  setAddrValues('identity-address-from-wrap', data.address_from_other || [], 'identity');
   if (document.getElementById('identity-custom-rel-name'))
     document.getElementById('identity-custom-rel-name').value = data.custom_rel_name || '';
 
@@ -1933,8 +1985,8 @@ async function doSaveIdentity() {
   const identity_desc = document.getElementById('identity-desc').value.trim();
   const relationship = document.getElementById('identity-rel').value;
   const counterpart_role = document.getElementById('identity-counterpart-role')?.value || '';
-  const address_to_other = document.getElementById('identity-address-to')?.value.trim() || '';
-  const address_from_other = document.getElementById('identity-address-from')?.value.trim() || '';
+  const address_to_other = getAddrValues('identity-address-to-wrap');
+  const address_from_other = getAddrValues('identity-address-from-wrap');
   const custom_rel_name = document.getElementById('identity-custom-rel-name')?.value.trim() || '';
   if (!name) return toast('名称不能为空', 'error');
 

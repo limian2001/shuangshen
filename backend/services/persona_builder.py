@@ -173,9 +173,26 @@ def build_system_prompt(
 
     # ── 对方角色 & 称呼 ──────────────────────────
     counterpart_role = (avatar.get("counterpart_role") or "").strip()
-    address_to_other = (avatar.get("address_to_other") or "").strip()
-    address_from_other = (avatar.get("address_from_other") or "").strip()
     custom_rel_name = (avatar.get("custom_rel_name") or "").strip()
+
+    # 称呼字段：兼容旧字符串和新 JSON 数组
+    def _parse_addr(val) -> list:
+        if not val:
+            return []
+        if isinstance(val, list):
+            return [v.strip() for v in val if str(v).strip()]
+        s = str(val).strip()
+        if s.startswith("["):
+            try:
+                import json as _json
+                arr = _json.loads(s)
+                return [str(v).strip() for v in arr if str(v).strip()]
+            except Exception:
+                pass
+        return [s] if s else []
+
+    addresses_to = _parse_addr(avatar.get("address_to_other"))
+    addresses_from = _parse_addr(avatar.get("address_from_other"))
 
     # 动态角色描述（加上对方身份）
     base_role_desc = template["role_desc"]
@@ -187,12 +204,25 @@ def build_system_prompt(
     else:
         role_desc = base_role_desc
 
-    # 称呼约定
+    # 称呼约定（支持多个）
     address_lines = []
-    if address_to_other:
-        address_lines.append(f"你叫对方「{address_to_other}」，请在对话中自然使用这个称呼")
-    if address_from_other:
-        address_lines.append(f"对方叫你「{address_from_other}」，当对方用这个称呼时自然回应")
+    if addresses_to:
+        if len(addresses_to) == 1:
+            address_lines.append(f"你叫对方「{addresses_to[0]}」")
+        else:
+            opts = "」「".join(addresses_to)
+            address_lines.append(
+                f"你叫对方的称呼有：「{opts}」——这几个语气轻重不同，根据当前对话的情感自然选用，"
+                "同一段对话里保持一致，不要每句都换"
+            )
+    if addresses_from:
+        if len(addresses_from) == 1:
+            address_lines.append(f"对方叫你「{addresses_from[0]}」，当对方用这个称呼时自然回应")
+        else:
+            opts = "」「".join(addresses_from)
+            address_lines.append(
+                f"对方叫你的称呼有：「{opts}」——用哪个取决于对方当时的语气，自然跟随即可"
+            )
     address_section = ("【称呼约定】\n" + "\n".join(f"- {p}" for p in address_lines)) if address_lines else ""
     style_profile = (avatar.get("style_profile") or "").strip()
     avg_reply_chars = avatar.get("avg_reply_chars", 0) or 0
