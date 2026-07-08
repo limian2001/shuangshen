@@ -9,6 +9,7 @@ Page({
     step: 'checking',  // 'checking' | 'need_phone' | 'done'
     nickname: '',
     wxCode: '',        // 缓存 wx.login() 的 code（手机授权步骤用）
+    agreed: false,     // 是否已勾选隐私协议
   },
 
   onLoad() {
@@ -114,6 +115,25 @@ Page({
           fail: () => this._showError('网络错误，请检查网络后重试'),
         });
       },
+    });
+  },
+
+  // 协议勾选变化
+  onAgreeChange(e) {
+    this.setData({ agreed: e.detail.value.length > 0 });
+  },
+
+  // 打开用户协议
+  openTerms() {
+    wx.navigateTo({
+      url: `/pages/policy/policy?type=terms&title=${encodeURIComponent('用户协议')}`,
+    });
+  },
+
+  // 打开隐私政策
+  openPrivacy() {
+    wx.navigateTo({
+      url: `/pages/policy/policy?type=privacy&title=${encodeURIComponent('隐私政策')}`,
     });
   },
 

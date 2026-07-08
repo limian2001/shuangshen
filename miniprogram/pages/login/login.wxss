@@ -98,10 +98,26 @@
   opacity: 0.7;
 }
 
-.tip {
+/* 隐私协议勾选行 */
+.agree-row {
+  width: 100%;
+}
+
+.agree-label {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.agree-text {
   font-size: 22rpx;
-  color: #bbb;
-  text-align: center;
+  color: #999;
+}
+
+.agree-link {
+  font-size: 22rpx;
+  color: #534AB7;
 }
 
 .tip-sub {

@@ -26,18 +26,30 @@
       />
     </view>
 
-    <!-- 授权手机号按钮（必须用 button open-type） -->
+    <!-- 隐私协议勾选（必须主动同意才能点按钮） -->
+    <view class="agree-row">
+      <checkbox-group bindchange="onAgreeChange">
+        <label class="agree-label">
+          <checkbox value="agreed" checked="{{agreed}}" color="#534AB7" />
+          <text class="agree-text">我已阅读并同意</text>
+          <text class="agree-link" bindtap="openTerms">《用户协议》</text>
+          <text class="agree-text">和</text>
+          <text class="agree-link" bindtap="openPrivacy">《隐私政策》</text>
+        </label>
+      </checkbox-group>
+    </view>
+
+    <!-- 授权手机号按钮（必须用 button open-type；未勾选协议时禁用） -->
     <button
       class="phone-btn"
       open-type="getPhoneNumber"
       bindgetphonenumber="onGetPhoneNumber"
       loading="{{loading}}"
-      disabled="{{loading}}"
+      disabled="{{!agreed || loading}}"
     >
-      微信手机号一键登录
+      手机号快捷登录
     </button>
 
-    <text class="tip">登录即同意《用户协议》和《隐私政策》</text>
     <text class="tip-sub">手机号仅用于账号识别，不会泄露</text>
   </view>
 </view>
