@@ -65,6 +65,12 @@ def create_app() -> Flask:
     def admin_frontend():
         return send_from_directory(str(FRONTEND_DIR), "admin.html")
 
+    # 微信业务域名校验文件
+    @app.get("/cp52rCayvx.txt")
+    def wx_verify():
+        from flask import Response
+        return Response("8b94997c641f54463a380a27a70d7b5a", mimetype="text/plain")
+
     # 健康检查
     @app.get("/")
     def health():
