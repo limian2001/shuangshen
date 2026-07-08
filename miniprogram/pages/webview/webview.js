@@ -10,8 +10,8 @@ Page({
   },
 
   onLoad() {
-    const base = app.globalData.BASE_URL
-    const token = app.globalData.token || wx.getStorageSync('ss_token') || ''
+    const base = app.globalData.apiBase
+    const token = app.globalData.token || wx.getStorageSync('yj_token') || ''
 
     if (!token) {
       // 没有 token（异常路径），回登录页重新走一遍

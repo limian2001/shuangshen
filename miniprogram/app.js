@@ -5,8 +5,7 @@ App({
   globalData: {
     token: null,
     userInfo: null,
-    // 临时用 IP 绕过 ICP 域名校验（开发调试用）；ICP 批下来后改回域名
-    apiBase: 'https://115.159.83.196',
+    apiBase: 'https://app.mianmianlife.com',
   },
 
   onLaunch() {
