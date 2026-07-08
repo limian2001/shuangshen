@@ -24,3 +24,7 @@ data/uploads/
 # 日志
 *.log
 logs/
+
+# 服务器配置（含域名/IP等敏感信息，不入公开仓库）
+nginx.conf
+nginx/
