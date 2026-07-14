@@ -130,6 +130,7 @@ def register():
     phone = (data.get("phone") or "").strip()
     email = (data.get("email") or "").strip()
     password = data.get("password", "")
+    referral_code = (data.get("referral_code") or "").strip()
 
     if not display_name:
         return jsonify({"error": "display_name 不能为空"}), 400
@@ -153,6 +154,27 @@ def register():
         if "UNIQUE" in str(e):
             return jsonify({"error": "手机号或邮箱已注册"}), 409
         return jsonify({"error": str(e)}), 500
+
+    # 新用户奖励
+    try:
+        from backend.services.coins import award_coins
+        award_coins(uid, 10, "signup")
+        if referral_code and referral_code != uid:
+            with get_db() as conn:
+                referrer = conn.execute("SELECT id FROM users WHERE id = ?", (referral_code,)).fetchone()
+                already = conn.execute("SELECT 1 FROM referral_records WHERE referred_id = ?", (uid,)).fetchone()
+            if referrer and not already:
+                # 邀请人得 20 币
+                award_coins(referral_code, 20, "referral", uid)
+                # 被邀请新用户额外再得 20 币（共 10+20=30）
+                award_coins(uid, 20, "referral_bonus", referral_code)
+                with get_db() as conn:
+                    conn.execute(
+                        "INSERT INTO referral_records (id, referrer_id, referred_id, coins_awarded) VALUES (?, ?, ?, 20)",
+                        (new_id(), referral_code, uid),
+                    )
+    except Exception as e:
+        print(f"[REGISTER] 新用户奖励失败: {e}")
 
     token = generate_token(uid)
     return jsonify({"token": token, "user_id": uid, "display_name": display_name}), 201
@@ -268,6 +290,8 @@ def wechat_phone_login():
     if err:
         return jsonify({"error": err}), 502
 
+    referral_code = (data.get("referral_code") or "").strip()
+
     with get_db() as conn:
         # 先查手机号是否已存在
         existing_user = row_to_dict(conn.execute(
@@ -302,6 +326,35 @@ def wechat_phone_login():
             )
             user = {"id": uid, "display_name": display_name}
             is_new = True
+
+    # ── 新用户奖励 ──────────────────────────────────────────────────────────
+    if is_new:
+        try:
+            from backend.services.coins import award_coins
+            # 注册送 10 币
+            award_coins(uid, 10, "signup")
+            # 邀请码处理（referral_code = 邀请人的 user_id）
+            if referral_code and referral_code != uid:
+                with get_db() as conn:
+                    referrer = conn.execute(
+                        "SELECT id FROM users WHERE id = ?", (referral_code,)
+                    ).fetchone()
+                    already_referred = conn.execute(
+                        "SELECT 1 FROM referral_records WHERE referred_id = ?", (uid,)
+                    ).fetchone()
+                if referrer and not already_referred:
+                    # 邀请人得 20 币
+                    award_coins(referral_code, 20, "referral", uid)
+                    # 被邀请新用户额外再得 20 币（共 10+20=30）
+                    award_coins(uid, 20, "referral_bonus", referral_code)
+                    with get_db() as conn:
+                        conn.execute(
+                            """INSERT INTO referral_records (id, referrer_id, referred_id, coins_awarded)
+                               VALUES (?, ?, ?, 20)""",
+                            (new_id(), referral_code, uid),
+                        )
+        except Exception as e:
+            print(f"[AUTH] 新用户奖励失败（不影响注册）: {e}")
 
     token = generate_token(uid)
     return jsonify({

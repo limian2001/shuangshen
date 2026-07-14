@@ -69,7 +69,7 @@ def list_users():
             ).fetchone()[0]
             users = rows_to_list(conn.execute(
                 """SELECT u.id, u.display_name, u.phone, u.email, u.status, u.is_admin,
-                          u.created_at,
+                          u.coins, u.created_at,
                           (SELECT COUNT(*) FROM avatars a WHERE a.creator_id=u.id AND a.status!='deleted') AS avatar_count,
                           (SELECT COUNT(*) FROM chat_messages cm JOIN avatars av ON cm.avatar_id=av.id WHERE av.creator_id=u.id) AS msg_count
                    FROM users u
@@ -81,7 +81,7 @@ def list_users():
             total = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
             users = rows_to_list(conn.execute(
                 """SELECT u.id, u.display_name, u.phone, u.email, u.status, u.is_admin,
-                          u.created_at,
+                          u.coins, u.created_at,
                           (SELECT COUNT(*) FROM avatars a WHERE a.creator_id=u.id AND a.status!='deleted') AS avatar_count,
                           (SELECT COUNT(*) FROM chat_messages cm JOIN avatars av ON cm.avatar_id=av.id WHERE av.creator_id=u.id) AS msg_count
                    FROM users u ORDER BY u.created_at DESC LIMIT ? OFFSET ?""",
@@ -101,7 +101,7 @@ def list_users():
 def get_user(user_id):
     with get_db() as conn:
         user = row_to_dict(conn.execute(
-            "SELECT id, display_name, phone, email, status, is_admin, role, created_at FROM users WHERE id = ?",
+            "SELECT id, display_name, phone, email, status, is_admin, role, coins, created_at FROM users WHERE id = ?",
             (user_id,)
         ).fetchone())
         if not user:

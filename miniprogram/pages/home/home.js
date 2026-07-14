@@ -6,37 +6,54 @@ const app = getApp();
 Page({
   data: {
     webviewUrl: '',
+    refCode: '',
   },
 
-  onLoad() {
+  onLoad(options) {
     const token = app.globalData.token;
     if (!token) {
-      // token 不存在或已过期，回登录页
-      wx.redirectTo({ url: '/pages/login/login' });
+      // token 不存在或已过期，带上 ref 参数回登录页
+      const ref = (options && options.ref) || '';
+      const url = ref ? `/pages/login/login?ref=${ref}` : '/pages/login/login';
+      wx.redirectTo({ url });
       return;
+    }
+
+    // 读取邀请码（来自分享链接或登录页透传）
+    const ref = (options && options.ref) || app.globalData.pendingRefCode || '';
+    if (ref) {
+      this.setData({ refCode: ref });
+      app.globalData.pendingRefCode = '';  // 消费后清空
     }
 
     const user    = app.globalData.userInfo || {};
     const name    = encodeURIComponent(user.display_name || '用户');
     const baseUrl = app.globalData.apiBase;
-    const url     = `${baseUrl}/app?token=${token}&name=${name}`;
+    // ref 传入 webview，H5 页面读取后自动填入邀请码
+    const refParam = ref ? `&ref=${encodeURIComponent(ref)}` : '';
+    const url     = `${baseUrl}/app?token=${token}&name=${name}${refParam}`;
 
     this.setData({ webviewUrl: url });
   },
 
   // 转发给朋友（定义此函数后右上角菜单的"转发"按钮才会亮起）
   onShareAppMessage() {
+    const user = app.globalData.userInfo || {};
+    const userId = user.user_id || '';
     return {
       title: '用 AI 重现你珍视的人，随时对话',
-      path: '/pages/login/login',
+      // 带入邀请码，被邀请者打开小程序时自动识别
+      path: userId ? `/pages/login/login?ref=${userId}` : '/pages/login/login',
     };
   },
 
-  // 分享到朋友圈（需在微信公众平台 → 功能设置 → 开启"分享到朋友圈"）
+  // 分享到朋友圈
   onShareTimeline() {
+    const user = app.globalData.userInfo || {};
+    const userId = user.user_id || '';
     return {
       title: '言己 — 让 AI 替身陪你说说话',
-      query: '',
+      query: userId ? `ref=${userId}` : '',
     };
   },
 

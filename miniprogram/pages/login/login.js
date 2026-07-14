@@ -12,9 +12,15 @@ Page({
     nickname: '',
     wxCode: '',        // 缓存 wx.login() 的 code（手机授权步骤用）
     agreed: false,     // 是否已勾选隐私协议
+    refCode: '',       // 邀请码（从分享链接自动带入）
   },
 
-  onLoad() {
+  onLoad(options) {
+    // 从分享链接带入邀请码（如 /pages/login/login?ref=USER_ID）
+    if (options && options.ref) {
+      this.setData({ refCode: options.ref });
+      app.globalData.pendingRefCode = options.ref;
+    }
     if (app.globalData.token) {
       this._goHome();
       return;
@@ -84,6 +90,7 @@ Page({
             wx_code: freshCode,
             phone_code: phoneCode,
             display_name: displayName,
+            referral_code: this.data.refCode || '',
           },
           success: (r) => {
             if (r.statusCode === 200 && r.data && r.data.token) {
@@ -104,6 +111,7 @@ Page({
             wx_code: this.data.wxCode,
             phone_code: phoneCode,
             display_name: displayName,
+            referral_code: this.data.refCode || '',
           },
           success: (r) => {
             if (r.statusCode === 200 && r.data && r.data.token) {
@@ -159,6 +167,8 @@ Page({
   },
 
   _goHome() {
-    wx.redirectTo({ url: '/pages/home/home' });
+    const ref = this.data.refCode;
+    const url = ref ? `/pages/home/home?ref=${ref}` : '/pages/home/home';
+    wx.redirectTo({ url });
   },
 });

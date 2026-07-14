@@ -222,6 +222,64 @@ def _run_migrations(conn: sqlite3.Connection):
         "ALTER TABLE avatars ADD COLUMN conversation_samples TEXT DEFAULT '[]'",
         # v0.10: 四类风格特征（JSON，情绪表达/转移话题/追问习惯/标志句式）
         "ALTER TABLE avatars ADD COLUMN style_features TEXT DEFAULT '{}'",
+        # v1.0: 言己币系统
+        "ALTER TABLE users ADD COLUMN coins INTEGER DEFAULT 0",
+        """CREATE TABLE IF NOT EXISTS coin_transactions (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL REFERENCES users(id),
+            amount INTEGER NOT NULL,
+            reason TEXT NOT NULL,
+            ref_id TEXT DEFAULT '',
+            balance_after INTEGER DEFAULT 0,
+            created_at TEXT DEFAULT (datetime('now'))
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_coin_tx_user ON coin_transactions(user_id)",
+        """CREATE TABLE IF NOT EXISTS avatar_feature_unlocks (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL REFERENCES users(id),
+            avatar_id TEXT NOT NULL REFERENCES avatars(id),
+            feature TEXT NOT NULL,
+            created_at TEXT DEFAULT (datetime('now')),
+            UNIQUE(user_id, avatar_id, feature)
+        )""",
+        """CREATE TABLE IF NOT EXISTS chat_content_unlocks (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL REFERENCES users(id),
+            avatar_id TEXT NOT NULL REFERENCES avatars(id),
+            receiver_id TEXT NOT NULL REFERENCES users(id),
+            messages_unlocked INTEGER DEFAULT 20,
+            created_at TEXT DEFAULT (datetime('now')),
+            updated_at TEXT DEFAULT (datetime('now')),
+            UNIQUE(creator_id, avatar_id, receiver_id)
+        )""",
+        """CREATE TABLE IF NOT EXISTS takeover_sessions (
+            id TEXT PRIMARY KEY,
+            avatar_id TEXT NOT NULL REFERENCES avatars(id),
+            creator_id TEXT NOT NULL REFERENCES users(id),
+            receiver_id TEXT NOT NULL REFERENCES users(id),
+            status TEXT DEFAULT 'active',
+            last_receiver_msg_at TEXT DEFAULT (datetime('now')),
+            started_at TEXT DEFAULT (datetime('now')),
+            ended_at TEXT
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_takeover_active ON takeover_sessions(avatar_id, receiver_id, status)",
+        """CREATE TABLE IF NOT EXISTS referral_records (
+            id TEXT PRIMARY KEY,
+            referrer_id TEXT NOT NULL REFERENCES users(id),
+            referred_id TEXT NOT NULL REFERENCES users(id),
+            coins_awarded INTEGER DEFAULT 20,
+            created_at TEXT DEFAULT (datetime('now')),
+            UNIQUE(referred_id)
+        )""",
+        """CREATE TABLE IF NOT EXISTS purchase_records (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL REFERENCES users(id),
+            amount_fen INTEGER NOT NULL,
+            coins INTEGER NOT NULL,
+            status TEXT DEFAULT 'pending',
+            wx_order_no TEXT DEFAULT '',
+            created_at TEXT DEFAULT (datetime('now'))
+        )""",
     ]
     for sql in migrations:
         try:

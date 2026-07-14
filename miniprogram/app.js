@@ -6,6 +6,7 @@ App({
     token: null,
     userInfo: null,
     apiBase: 'https://app.mianmianlife.com',
+    pendingRefCode: '',   // 从分享链接带入的邀请码，登录后传给 home/webview
   },
 
   onLaunch() {

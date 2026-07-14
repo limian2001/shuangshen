@@ -43,6 +43,27 @@ def send_message(avatar_id):
     if not message:
         return jsonify({"error": "消息不能为空"}), 400
 
+    # ── 检查人工接管 ──────────────────────────────────────────────────────────
+    with get_db() as _tc:
+        active_takeover = _tc.execute(
+            "SELECT id FROM takeover_sessions WHERE avatar_id=? AND receiver_id=? AND status='active'",
+            (avatar_id, g.user_id),
+        ).fetchone()
+    if active_takeover:
+        # 接管中：存储接收者消息，但不调用 LLM；返回接管标志
+        _save_message(avatar_id, g.user_id, "user", message)
+        # 更新 last_receiver_msg_at
+        with get_db() as _tc:
+            _tc.execute(
+                "UPDATE takeover_sessions SET last_receiver_msg_at=datetime('now') WHERE id=?",
+                (active_takeover["id"],),
+            )
+        return jsonify({
+            "reply": None,
+            "takeover": True,
+            "message": "对方正在亲自回复你，请稍候…",
+        })
+
     # ① 取近期对话历史（用于上下文感知 + 重复话题检测）
     history = _get_recent_history(avatar_id, g.user_id, limit=MAX_HISTORY)
 

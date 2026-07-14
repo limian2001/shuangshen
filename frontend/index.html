@@ -230,6 +230,56 @@ select { cursor: pointer; }
 .sender-card:hover { border-color: var(--purple-mid); background: var(--purple-light); }
 .sender-card.selected { border-color: var(--purple); background: var(--purple-light); }
 
+/* ── 言己币 ── */
+.coins-display { padding: 8px 18px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--purple); cursor: pointer; transition: background .12s; }
+.coins-display:hover { background: var(--purple-light); }
+.coins-display .coins-num { font-weight: 700; font-size: 14px; }
+
+/* ── 购买弹窗 ── */
+#purchase-modal { position:fixed;inset:0;z-index:600;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;padding:20px; }
+.purchase-box { background:var(--surface);border-radius:18px;padding:24px 20px;width:min(360px,100%); }
+.purchase-box h3 { font-size:17px;font-weight:600;margin-bottom:4px; }
+.purchase-packages { display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin:16px 0; }
+.purchase-pkg { background:var(--bg);border:2px solid var(--border-md);border-radius:12px;padding:16px;text-align:center;cursor:pointer;transition:all .15s; }
+.purchase-pkg:hover { border-color:var(--purple);background:var(--purple-light); }
+.purchase-pkg .pkg-coins { font-size:18px;font-weight:700;color:var(--purple); }
+.purchase-pkg .pkg-price { font-size:13px;color:var(--text-3);margin-top:4px; }
+.purchase-stub-note { font-size:11px;color:var(--text-3);background:var(--amber-light);border-radius:6px;padding:6px 10px;margin-bottom:14px;line-height:1.6; }
+
+/* ── 查看器弹窗 ── */
+#viewer-modal,#chat-content-modal,#takeover-modal { position:fixed;inset:0;z-index:600;background:rgba(0,0,0,.55);display:none;align-items:flex-end;justify-content:center;padding:0; }
+.viewer-panel { background:var(--surface);border-radius:18px 18px 0 0;width:min(520px,100%);max-height:85vh;display:flex;flex-direction:column;overflow:hidden; }
+.viewer-panel-header { padding:16px 20px 12px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0; }
+.viewer-panel-header h3 { font-size:16px;font-weight:600; }
+.viewer-panel-body { flex:1;overflow-y:auto;padding:16px 20px; }
+.binder-row { display:flex;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid var(--border); }
+.binder-row:last-child { border-bottom:none; }
+.binder-info { flex:1;min-width:0; }
+.binder-name { font-size:14px;font-weight:500; }
+.binder-meta { font-size:11px;color:var(--text-3);margin-top:2px;line-height:1.5; }
+.binder-actions { display:flex;gap:6px;flex-shrink:0; }
+/* 聊天内容 */
+.chat-msg-row { padding:8px 0;border-bottom:1px solid var(--border); }
+.chat-msg-row:last-child { border-bottom:none; }
+.chat-msg-role { font-size:10px;font-weight:600;color:var(--text-3);text-transform:uppercase;margin-bottom:2px; }
+.chat-msg-row.from-receiver .chat-msg-role { color:var(--purple); }
+.chat-msg-bubble { font-size:13px;line-height:1.55;color:var(--text); }
+.chat-msg-time { font-size:10px;color:var(--text-3);margin-top:3px; }
+/* 接管聊天气泡 */
+.takeover-chat-log { flex:1;overflow-y:auto;padding:12px 0;display:flex;flex-direction:column;gap:8px; }
+.takeover-msg { display:flex;flex-direction:column; }
+.takeover-msg.from-receiver { align-items:flex-start; }
+.takeover-msg.from-me { align-items:flex-end; }
+.takeover-bubble { padding:8px 12px;border-radius:12px;font-size:13px;max-width:80%; }
+.takeover-msg.from-receiver .takeover-bubble { background:var(--bg);border:1px solid var(--border); }
+.takeover-msg.from-me .takeover-bubble { background:var(--purple);color:#fff; }
+.takeover-time { font-size:10px;color:var(--text-3);margin-top:2px; }
+.takeover-input-row { display:flex;gap:8px;padding:12px 0 0;border-top:1px solid var(--border);flex-shrink:0; }
+.takeover-input-row textarea { flex:1;padding:8px 12px;border:1px solid var(--border-md);border-radius:8px;font-size:13px;font-family:inherit;resize:none;min-height:38px;max-height:80px;outline:none; }
+.takeover-input-row textarea:focus { border-color:var(--purple-mid); }
+/* aca-view button */
+.aca-view:hover { background:var(--amber-light);color:var(--amber);border-color:rgba(133,79,11,.3); }
+
 /* ══════════════════════════════════════════════════════
    移动端布局
    触发：① body.is-mobile（JS 检测 screen.width，WeChat 专用）
@@ -364,6 +414,7 @@ body.is-mobile .row .field   { width: 100%; }
       <div class="field"><label>你的名字</label><input type="text" id="r-name" placeholder="如：小王"></div>
       <div class="field"><label>手机号</label><input type="tel" id="r-phone" placeholder="13800000000"></div>
       <div class="field"><label>密码（至少6位）</label><input type="password" id="r-pwd" placeholder="请设置密码"></div>
+      <div class="field"><label>邀请码（选填）</label><input type="text" id="r-referral" placeholder="朋友的邀请码（选填）"></div>
       <button class="btn btn-primary btn-full" onclick="doRegister()">注册</button>
       <p class="auth-toggle">已有账号？<a onclick="showLogin()">立即登录</a></p>
     </div>
@@ -384,6 +435,10 @@ body.is-mobile .row .field   { width: 100%; }
         <div class="name" id="user-name-display">加载中</div>
         <div class="role">创建者</div>
       </div>
+    </div>
+    <div class="coins-display" onclick="showPurchaseModal()">
+      🪙&nbsp;<span class="coins-num" id="coins-count">--</span>&nbsp;言己币
+      <span style="margin-left:auto;font-size:11px;color:var(--purple-mid)">充值 &rsaquo;</span>
     </div>
     <div class="nav-section">
       <div class="nav-label">主菜单</div>
@@ -870,6 +925,33 @@ body.is-mobile .row .field   { width: 100%; }
           <span id="revoke-status" style="font-size:12px;color:var(--text-3)"></span>
         </div>
       </div>
+      <!-- 查看绑定用户 -->
+      <div class="card" style="margin-top:14px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <div class="card-title" style="margin:0">查看绑定用户</div>
+          <button class="btn btn-secondary btn-sm" onclick="openViewerModal(currentAvatar)">查看用户</button>
+        </div>
+        <div style="font-size:13px;color:var(--text-2)">查看谁绑定了该替身、消息统计、聊天记录，或进行人工接管（首次需10币解锁）</div>
+      </div>
+      <!-- 分享得币 -->
+      <div class="card" style="margin-top:14px">
+        <div class="card-title">分享小程序 · 得言己币</div>
+        <div style="font-size:13px;color:var(--text-2);margin-bottom:10px">
+          每次分享得 <strong>10 币</strong>，每天最多 3 次。今日剩余：<strong id="share-remaining">--</strong> 次
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="doShareRecord(this)" style="width:100%;margin-bottom:8px">🔗 分享并获得言己币</button>
+        <div style="font-size:11px;color:var(--text-3);line-height:1.6">点击后复制链接，转发给好友即可到账。每日 0 点（北京时间）重置。</div>
+      </div>
+      <!-- 邀请注册双赢 -->
+      <div class="card" style="margin-top:14px">
+        <div class="card-title">邀请好友注册 · 双方各得20币</div>
+        <div style="font-size:13px;color:var(--text-2);margin-bottom:10px">好友通过邀请链接注册，<strong>你得 20 币</strong>，<strong>好友得 30 币</strong>（含注册默认 10 币）</div>
+        <div class="share-code-box">
+          <code id="my-referral-code" style="font-size:13px;letter-spacing:0;word-break:break-all">--</code>
+          <button class="btn btn-secondary btn-sm" onclick="copyReferralLink()">复制邀请</button>
+        </div>
+        <div style="font-size:11px;color:var(--text-3);margin-top:8px;line-height:1.7">好友打开链接后自动带入邀请码，注册成功即到账，无需手动填写</div>
+      </div>
     </div>
 
   </div>
@@ -899,13 +981,110 @@ body.is-mobile .row .field   { width: 100%; }
   <div onclick="event.stopPropagation()"
     style="background:var(--surface);border-radius:18px;padding:24px 20px;width:min(320px,100%)">
     <h3 style="font-size:17px;font-weight:600;margin-bottom:6px">绑定替身</h3>
-    <p style="font-size:13px;color:var(--text-3);margin-bottom:16px">输入对方分享给你的共享码</p>
+    <p style="font-size:13px;color:var(--text-3);margin-bottom:10px">输入对方分享给你的共享码</p>
+    <div style="background:var(--amber-light);border:1px solid rgba(133,79,11,.2);border-radius:8px;padding:9px 12px;font-size:12px;color:var(--amber);line-height:1.7;margin-bottom:14px">
+      ⚠️ <strong>知情声明</strong>：替身创建者可查看你与该替身的全部对话内容，请确认知悉后再绑定。
+    </div>
     <input type="text" id="bind-code-input" placeholder="粘贴或输入共享码"
       style="text-align:center;font-size:16px;letter-spacing:3px;font-family:monospace" maxlength="16"
       onkeydown="if(event.key==='Enter')doBindFromModal()">
     <div style="display:flex;gap:8px;margin-top:16px">
       <button class="btn btn-primary" style="flex:1" onclick="doBindFromModal()">确定绑定</button>
       <button class="btn btn-secondary" onclick="closeBindModal()">取消</button>
+    </div>
+  </div>
+</div>
+
+<!-- 购买言己币 弹窗 -->
+<div id="purchase-modal" onclick="closePurchaseModal()" style="position:fixed;inset:0;z-index:600;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;padding:20px">
+  <div class="purchase-box" onclick="event.stopPropagation()">
+    <h3>购买言己币</h3>
+    <p style="font-size:13px;color:var(--text-3);margin-top:4px;margin-bottom:10px">用于解锁查看、接管等付费功能</p>
+    <div class="purchase-stub-note">⚠️ 当前为测试模式，下单后直接到账，未实际扣款。正式版接入微信支付后将真实收费。</div>
+    <div class="purchase-packages" id="purchase-packages">
+      <div style="text-align:center;color:var(--text-3);padding:20px;grid-column:span 2">加载中…</div>
+    </div>
+    <button class="btn btn-secondary btn-full" onclick="closePurchaseModal()">关闭</button>
+  </div>
+</div>
+
+<!-- 查看绑定用户 面板 -->
+<div id="viewer-modal" onclick="closeViewerModal()">
+  <div class="viewer-panel" onclick="event.stopPropagation()">
+    <div class="viewer-panel-header">
+      <h3 id="viewer-modal-title">查看绑定用户</h3>
+      <button class="btn btn-secondary btn-sm" onclick="closeViewerModal()">关闭</button>
+    </div>
+    <div class="viewer-panel-body">
+      <!-- 未解锁状态 -->
+      <div id="viewer-lock-wrap" style="text-align:center;padding:24px 0">
+        <div style="font-size:32px;margin-bottom:12px">🔒</div>
+        <div style="font-size:14px;font-weight:600;margin-bottom:8px">解锁查看绑定用户</div>
+        <div id="viewer-lock-desc" style="font-size:13px;color:var(--text-2);margin-bottom:16px;line-height:1.7"></div>
+        <button class="btn btn-primary" id="viewer-unlock-btn" onclick="doUnlockViewer()">解锁（10 言己币）</button>
+        <div style="font-size:12px;color:var(--text-3);margin-top:10px">终身有效，解锁一次永久可查看</div>
+      </div>
+      <!-- 已解锁：绑定用户列表 -->
+      <div id="viewer-binders-wrap" style="display:none">
+        <div id="viewer-binders-list"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 查看聊天内容 面板 -->
+<div id="chat-content-modal" onclick="closeChatContentModal()">
+  <div class="viewer-panel" onclick="event.stopPropagation()">
+    <div class="viewer-panel-header">
+      <h3 id="chat-content-modal-title">聊天记录</h3>
+      <button class="btn btn-secondary btn-sm" onclick="closeChatContentModal()">返回</button>
+    </div>
+    <div class="viewer-panel-body" style="display:flex;flex-direction:column;gap:10px">
+      <div id="chat-content-lock-banner" style="display:none;background:var(--amber-light);border-radius:8px;padding:10px 14px">
+        <div style="font-size:13px;color:var(--amber);margin-bottom:8px">还有更多对话可解锁（最新在前，每次解锁 20 条）</div>
+        <button class="btn btn-primary btn-sm" id="chat-content-unlock-btn" onclick="doUnlockChatBlock()">解锁更多</button>
+      </div>
+      <div id="chat-content-list" style="flex:1"></div>
+      <div id="chat-content-more-btn" style="display:none;text-align:center;padding:8px 0">
+        <button class="btn btn-secondary btn-sm" onclick="loadMoreChatContent()">查看更早的记录</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 人工接管 面板 -->
+<div id="takeover-modal" onclick="closeTakeoverModal()">
+  <div class="viewer-panel" onclick="event.stopPropagation()" style="max-height:90vh">
+    <div class="viewer-panel-header">
+      <h3 id="takeover-modal-title">人工接管</h3>
+      <button class="btn btn-secondary btn-sm" onclick="closeTakeoverModal()">返回</button>
+    </div>
+    <div class="viewer-panel-body" style="display:flex;flex-direction:column">
+      <!-- 未接管 -->
+      <div id="takeover-start-wrap" style="text-align:center;padding:20px 0">
+        <div style="font-size:32px;margin-bottom:10px">🎮</div>
+        <div style="font-size:14px;font-weight:600;margin-bottom:6px">发起人工接管</div>
+        <div style="font-size:13px;color:var(--text-2);margin-bottom:16px;line-height:1.7">
+          接管后 AI 暂停回复，由你直接与对方对话。<br>
+          对话内容会自动存入替身记忆。<br>
+          对方超过 5 分钟无响应自动结束。
+        </div>
+        <button class="btn btn-primary" onclick="doStartTakeover()">开始接管（20 言己币）</button>
+      </div>
+      <!-- 接管中 -->
+      <div id="takeover-active-wrap" style="display:none;flex:1;flex-direction:column">
+        <div style="background:var(--teal-light);border-radius:8px;padding:8px 14px;margin-bottom:10px;font-size:12px;color:var(--teal);display:flex;align-items:center;justify-content:space-between">
+          <span>🟢 接管进行中 · AI 已暂停</span>
+          <button class="btn btn-danger btn-sm" style="padding:3px 10px;font-size:11px" onclick="doEndTakeover()">结束接管</button>
+        </div>
+        <div class="takeover-chat-log" id="takeover-chat-log"></div>
+        <div class="takeover-input-row">
+          <textarea id="takeover-input" placeholder="以替身身份回复…" rows="1"
+            onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();doTakeoverSend()}"
+            oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,80)+'px'"></textarea>
+          <button class="btn btn-primary" onclick="doTakeoverSend()">发送</button>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -1057,8 +1236,8 @@ function selectCounterpart(prefix, val, btn) {
 
 // ─── Init ───────────────────────────────────
 window.onload = () => {
-  // 微信小程序 web-view 将 token 和昵称拼在 URL 里传入
-  // 格式：/app?token=xxx&name=用户名
+  // 微信小程序 web-view 将 token、昵称、邀请码拼在 URL 里传入
+  // 格式：/app?token=xxx&name=用户名&ref=邀请码
   const params = new URLSearchParams(window.location.search);
   const urlToken = params.get('token');
   if (urlToken) {
@@ -1075,7 +1254,13 @@ window.onload = () => {
     loadAvatars();
   } else {
     showAuth();
-    showLogin();
+    // 有邀请码则直接到注册页，否则到登录页
+    const urlRef = params.get('ref');
+    if (urlRef) {
+      showRegister();  // showRegister 内会自动填入 urlRef
+    } else {
+      showLogin();
+    }
   }
 };
 
@@ -1090,6 +1275,7 @@ function showApp() {
     document.getElementById('user-name-display').textContent = currentUser.display_name;
     document.getElementById('user-initials').textContent = currentUser.display_name?.[0] || '?';
   }
+  loadCoinBalance();
 }
 function showLogin() {
   document.getElementById('auth-title').textContent = '欢迎回来';
@@ -1102,13 +1288,20 @@ function showRegister() {
   document.getElementById('auth-sub').textContent = '开始创建你的数字替身';
   document.getElementById('login-form').style.display = 'none';
   document.getElementById('register-form').style.display = 'block';
+  // 从 URL 参数自动带入邀请码
+  const urlRef = new URLSearchParams(window.location.search).get('ref') || '';
+  if (urlRef) {
+    const el = document.getElementById('r-referral');
+    if (el && !el.value) el.value = urlRef;
+  }
 }
 
 // ─── Auth ────────────────────────────────────
 async function doRegister() {
   const name = v('r-name'), phone = v('r-phone'), pwd = v('r-pwd');
+  const referral_code = v('r-referral').trim();
   if (!name || !phone || !pwd) return toast('请填写所有字段', 'error');
-  const res = await api('POST', '/api/auth/register', { display_name: name, phone, password: pwd });
+  const res = await api('POST', '/api/auth/register', { display_name: name, phone, password: pwd, referral_code });
   if (res.token) {
     saveAuth(res);
     showApp();
@@ -1319,6 +1512,10 @@ async function loadAvatars() {
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
           分享
         </button>
+        <button class="aca-btn aca-view" onclick="openViewerModal(${aj})">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          查看
+        </button>
       </div>
     </div>`;
   }).join('');
@@ -1484,7 +1681,11 @@ async function sendMessage() {
   hideTyping();
   document.getElementById('send-btn').disabled = false;
 
-  if (res && res.reply) {
+  if (res && res.takeover) {
+    // 人工接管中：显示提示，开始接收者轮询
+    appendMsg('assistant', res.message || '对方正在亲自回复你，请稍候…', true);
+    startReceiverTakeoverPoll(avatarId);
+  } else if (res && res.reply) {
     appendMsg('assistant', res.reply, true, res.intercepted);
     // 追加到本地缓存
     _appendChatCache(avatarId, 'user', text);
@@ -1975,6 +2176,11 @@ async function loadShareCode() {
   if (res.share_code) {
     document.getElementById('share-code-display').textContent = res.share_code;
   }
+  // 邀请码 = 当前用户 ID
+  const refEl = document.getElementById('my-referral-code');
+  if (refEl && currentUser?.user_id) refEl.textContent = currentUser.user_id;
+  // 加载今日分享剩余次数
+  loadShareStatus();
   // 更新撤回按钮状态
   const inactive = currentAvatar.status === 'inactive';
   const btn = document.getElementById('revoke-btn');
@@ -2236,6 +2442,404 @@ function toast(msg, type) {
   el.className = 'toast show' + (type ? ' ' + type : '');
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+// ─── 言己币 ──────────────────────────────────
+async function loadCoinBalance() {
+  const res = await api('GET', '/api/coins');
+  if (res != null) {
+    const el = document.getElementById('coins-count');
+    if (el) el.textContent = res.coins;
+  }
+}
+
+// ─── 购买言己币 ───────────────────────────────
+let _packages = null;
+async function showPurchaseModal() {
+  document.getElementById('purchase-modal').style.display = 'flex';
+  if (!_packages) {
+    const pkgs = await api('GET', '/api/payment/packages');
+    if (pkgs) {
+      _packages = pkgs;
+      document.getElementById('purchase-packages').innerHTML = pkgs.map(p =>
+        `<div class="purchase-pkg" onclick="doCreateOrder('${p.id}',this)">
+          <div class="pkg-coins">${p.coins} 币</div>
+          <div class="pkg-price">${p.price_display}</div>
+        </div>`
+      ).join('');
+    }
+  }
+}
+function closePurchaseModal() {
+  document.getElementById('purchase-modal').style.display = 'none';
+}
+async function doCreateOrder(pkgId, btn) {
+  if (btn) btn.style.opacity = '.5';
+  const res = await api('POST', '/api/payment/create-order', { package_id: pkgId });
+  if (btn) btn.style.opacity = '';
+  if (res) {
+    toast(`+${res.coins} 言己币已到账，余额 ${res.balance} 币`, 'success');
+    const el = document.getElementById('coins-count');
+    if (el) el.textContent = res.balance;
+    closePurchaseModal();
+  }
+}
+
+// ─── 查看绑定用户 ─────────────────────────────
+let _viewerAvatar = null;
+
+async function openViewerModal(avatar) {
+  if (!avatar) return;
+  _viewerAvatar = avatar;
+  document.getElementById('viewer-modal-title').textContent = avatar.name + ' — 绑定用户';
+  document.getElementById('viewer-modal').style.display = 'flex';
+  await _loadViewerStatus();
+}
+function closeViewerModal() {
+  document.getElementById('viewer-modal').style.display = 'none';
+  _viewerAvatar = null;
+}
+
+async function _loadViewerStatus() {
+  if (!_viewerAvatar) return;
+  const res = await api('GET', `/api/viewer/${_viewerAvatar.id}/unlock-status`);
+  if (!res) return;
+  const lockWrap    = document.getElementById('viewer-lock-wrap');
+  const bindersWrap = document.getElementById('viewer-binders-wrap');
+  if (res.unlocked) {
+    lockWrap.style.display = 'none';
+    bindersWrap.style.display = 'block';
+    _loadBinders();
+  } else {
+    lockWrap.style.display = 'block';
+    bindersWrap.style.display = 'none';
+    document.getElementById('viewer-lock-desc').innerHTML =
+      `解锁后可查看所有绑定用户的统计（微信ID尾号、消息量、活跃时间）。<br>终身有效，无需重复付费。<br><strong>当前余额：${res.coins} 言己币</strong>`;
+    document.getElementById('viewer-unlock-btn').textContent = `解锁（${res.cost} 言己币）`;
+  }
+}
+
+async function doUnlockViewer() {
+  if (!_viewerAvatar) return;
+  const res = await api('POST', `/api/viewer/${_viewerAvatar.id}/unlock`);
+  if (res && (res.ok || res.already_unlocked)) {
+    toast('已解锁查看功能！', 'success');
+    loadCoinBalance();
+    _loadViewerStatus();
+  }
+}
+
+async function _loadBinders() {
+  if (!_viewerAvatar) return;
+  const res = await api('GET', `/api/viewer/${_viewerAvatar.id}/binders`);
+  const el = document.getElementById('viewer-binders-list');
+  if (!res || res.length === 0) {
+    el.innerHTML = '<div class="empty" style="padding:20px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="36" height="36"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg><p>暂无绑定用户</p></div>';
+    return;
+  }
+  el.innerHTML = res.map(b => {
+    const msgs24h = b.msgs_24h || 0;
+    return `<div class="binder-row">
+      <div class="binder-info">
+        <div class="binder-name">${esc(b.display_name)}</div>
+        <div class="binder-meta">尾号：${esc(b.phone_tail)} · 绑定：${fmtDate(b.bound_at)} · 消息：${b.total_messages || 0} 条${msgs24h ? ` <span style="color:var(--teal)">（今日 ${msgs24h} 条）</span>` : ''}</div>
+        <div class="binder-meta">首次：${fmtDate(b.first_msg_at) || '未对话'} · 最近：${fmtDate(b.last_msg_at) || '—'}</div>
+      </div>
+      <div class="binder-actions">
+        <button class="btn btn-secondary btn-sm" onclick="openChatContentModal('${b.receiver_id}','${esc(b.display_name)}')">聊天记录</button>
+        <button class="btn btn-primary btn-sm" onclick="openTakeoverModal('${b.receiver_id}','${esc(b.display_name)}')">接管</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ─── 聊天内容查看 ─────────────────────────────
+let _chatReceiverId = null;
+let _chatReceiverName = '';
+let _chatOffset = 0;
+let _chatMsgsUnlocked = 0;
+
+async function openChatContentModal(receiverId, receiverName) {
+  _chatReceiverId = receiverId;
+  _chatReceiverName = receiverName;
+  _chatOffset = 0;
+  document.getElementById('chat-content-modal-title').textContent = '「' + receiverName + '」的对话';
+  document.getElementById('chat-content-modal').style.display = 'flex';
+  _loadChatContentStatus();
+}
+function closeChatContentModal() {
+  document.getElementById('chat-content-modal').style.display = 'none';
+  _chatReceiverId = null;
+}
+
+async function _loadChatContentStatus() {
+  if (!_viewerAvatar || !_chatReceiverId) return;
+  const res = await api('GET', `/api/viewer/${_viewerAvatar.id}/chat/${_chatReceiverId}/unlock-status`);
+  if (!res) return;
+  _chatMsgsUnlocked = res.messages_unlocked;
+  const lockBanner = document.getElementById('chat-content-lock-banner');
+  const unlockBtn  = document.getElementById('chat-content-unlock-btn');
+  const hasMore = res.total_messages > res.messages_unlocked;
+  lockBanner.style.display = hasMore || res.messages_unlocked === 0 ? 'block' : 'none';
+  const costLabel = `${res.cost_per_block} 币（余额 ${res.coins} 币）`;
+  unlockBtn.textContent = res.messages_unlocked === 0
+    ? `查看最新 20 条（${costLabel}）`
+    : `解锁更多 20 条（${costLabel}）`;
+  if (res.messages_unlocked > 0) {
+    _loadChatContent();
+  } else {
+    document.getElementById('chat-content-list').innerHTML =
+      '<div class="empty" style="padding:20px"><p>点击上方按钮查看最新 20 条对话</p></div>';
+  }
+}
+
+async function doUnlockChatBlock() {
+  if (!_viewerAvatar || !_chatReceiverId) return;
+  const res = await api('POST', `/api/viewer/${_viewerAvatar.id}/chat/${_chatReceiverId}/unlock`);
+  if (res && res.ok) {
+    toast(`解锁成功，当前共解锁 ${res.messages_unlocked} 条`, 'success');
+    loadCoinBalance();
+    _chatMsgsUnlocked = res.messages_unlocked;
+    _chatOffset = 0;
+    _loadChatContentStatus();
+  }
+}
+
+async function _loadChatContent() {
+  if (!_viewerAvatar || !_chatReceiverId) return;
+  const res = await api('GET', `/api/viewer/${_viewerAvatar.id}/chat/${_chatReceiverId}?offset=${_chatOffset}`);
+  const el = document.getElementById('chat-content-list');
+  if (!res || !res.messages || res.messages.length === 0) {
+    el.innerHTML = '<div class="empty" style="padding:20px"><p>暂无对话记录</p></div>';
+    return;
+  }
+  const html = res.messages.map(m =>
+    `<div class="chat-msg-row ${m.role === 'user' ? 'from-receiver' : 'from-bot'}">
+      <div class="chat-msg-role">${m.role === 'user' ? '对方' : '替身（AI）'}</div>
+      <div class="chat-msg-bubble">${esc(m.content).replace(/\n/g,'<br>')}</div>
+      <div class="chat-msg-time">${fmtDate(m.created_at)}</div>
+    </div>`
+  ).join('');
+  if (_chatOffset === 0) el.innerHTML = html;
+  else el.innerHTML += html;
+  document.getElementById('chat-content-more-btn').style.display =
+    _chatMsgsUnlocked > _chatOffset + 20 ? 'block' : 'none';
+}
+
+function loadMoreChatContent() {
+  _chatOffset += 20;
+  _loadChatContent();
+}
+
+// ─── 人工接管（创建者端） ──────────────────────
+let _takeoverSessionId  = null;
+let _takeoverReceiverId = null;
+let _takeoverPollTimer  = null;
+let _takeoverLastMsgAt  = '';
+
+async function openTakeoverModal(receiverId, receiverName) {
+  _takeoverReceiverId = receiverId;
+  _takeoverSessionId  = null;
+  _takeoverLastMsgAt  = '';
+  document.getElementById('takeover-modal-title').textContent = '接管「' + receiverName + '」';
+  document.getElementById('takeover-chat-log').innerHTML = '';
+  const startWrap  = document.getElementById('takeover-start-wrap');
+  const activeWrap = document.getElementById('takeover-active-wrap');
+  startWrap.style.display = 'block';
+  activeWrap.style.display = 'none';
+  document.getElementById('takeover-modal').style.display = 'flex';
+
+  // 检查是否已有活跃 session
+  const sessions = await api('GET', '/api/takeover/my-sessions');
+  if (sessions) {
+    const existing = sessions.find(s =>
+      _viewerAvatar && s.avatar_id === _viewerAvatar.id && s.receiver_id === receiverId
+    );
+    if (existing) {
+      _takeoverSessionId = existing.id;
+      startWrap.style.display  = 'none';
+      activeWrap.style.display = 'flex';
+      activeWrap.style.flexDirection = 'column';
+      _startPollingTakeover();
+    }
+  }
+}
+
+function closeTakeoverModal() {
+  document.getElementById('takeover-modal').style.display = 'none';
+  if (_takeoverPollTimer) { clearInterval(_takeoverPollTimer); _takeoverPollTimer = null; }
+  _takeoverSessionId  = null;
+  _takeoverReceiverId = null;
+}
+
+async function doStartTakeover() {
+  if (!_viewerAvatar || !_takeoverReceiverId) return;
+  const res = await api('POST', `/api/takeover/${_viewerAvatar.id}/start/${_takeoverReceiverId}`);
+  if (res && res.session_id) {
+    _takeoverSessionId = res.session_id;
+    toast('接管成功！AI 已暂停', 'success');
+    loadCoinBalance();
+    const startWrap  = document.getElementById('takeover-start-wrap');
+    const activeWrap = document.getElementById('takeover-active-wrap');
+    startWrap.style.display  = 'none';
+    activeWrap.style.display = 'flex';
+    activeWrap.style.flexDirection = 'column';
+    _startPollingTakeover();
+  }
+}
+
+async function doEndTakeover() {
+  if (!_takeoverSessionId) return;
+  if (!confirm('确认结束接管？AI 将恢复自动回复')) return;
+  const res = await api('POST', `/api/takeover/${_takeoverSessionId}/end`);
+  if (res && res.ok) {
+    toast('接管已结束，AI 恢复工作', 'success');
+    if (_takeoverPollTimer) { clearInterval(_takeoverPollTimer); _takeoverPollTimer = null; }
+    _takeoverSessionId = null;
+    document.getElementById('takeover-start-wrap').style.display  = 'block';
+    document.getElementById('takeover-active-wrap').style.display = 'none';
+  }
+}
+
+async function doTakeoverSend() {
+  if (!_takeoverSessionId) return;
+  const inp = document.getElementById('takeover-input');
+  const msg = inp.value.trim();
+  if (!msg) return;
+  inp.value = '';
+  inp.style.height = 'auto';
+  const res = await api('POST', `/api/takeover/${_takeoverSessionId}/message`, { message: msg });
+  if (res && res.ok) {
+    _appendTakeoverMsg({ role: 'assistant', content: msg, created_at: new Date().toISOString() });
+  }
+}
+
+function _startPollingTakeover() {
+  if (_takeoverPollTimer) clearInterval(_takeoverPollTimer);
+  _takeoverLastMsgAt = '';
+  _pollTakeover();
+  _takeoverPollTimer = setInterval(_pollTakeover, 3000);
+}
+
+async function _pollTakeover() {
+  if (!_takeoverSessionId) return;
+  const since = _takeoverLastMsgAt ? '?since=' + encodeURIComponent(_takeoverLastMsgAt) : '';
+  let res;
+  try {
+    const r = await fetch(API + `/api/takeover/${_takeoverSessionId}/poll${since}`,
+      { headers: { Authorization: 'Bearer ' + token } });
+    res = await r.json();
+  } catch(e) { return; }
+  if (res.status === 'ended') {
+    if (_takeoverPollTimer) { clearInterval(_takeoverPollTimer); _takeoverPollTimer = null; }
+    toast('接管已自动结束（对方5分钟无响应）', 'success');
+    _takeoverSessionId = null;
+    document.getElementById('takeover-start-wrap').style.display  = 'block';
+    document.getElementById('takeover-active-wrap').style.display = 'none';
+    return;
+  }
+  if (res.messages && res.messages.length > 0) {
+    res.messages.filter(m => m.role === 'user').forEach(m => _appendTakeoverMsg(m));
+    _takeoverLastMsgAt = res.messages[res.messages.length - 1].created_at;
+  }
+}
+
+function _appendTakeoverMsg(msg) {
+  const el = document.getElementById('takeover-chat-log');
+  if (!el) return;
+  const div = document.createElement('div');
+  div.className = 'takeover-msg ' + (msg.role === 'user' ? 'from-receiver' : 'from-me');
+  div.innerHTML = `<div class="takeover-bubble">${esc(msg.content).replace(/\n/g,'<br>')}</div><div class="takeover-time">${fmtDate(msg.created_at)}</div>`;
+  el.appendChild(div);
+  el.scrollTop = el.scrollHeight;
+}
+
+// ─── 接收者端：接管轮询 ────────────────────────
+let _receiverTakeoverTimer = null;
+let _receiverTakeoverSince = '';
+
+function startReceiverTakeoverPoll(avatarId) {
+  if (_receiverTakeoverTimer) return; // 已在轮询中
+  _receiverTakeoverSince = '';
+  _receiverTakeoverTimer = setInterval(() => _pollReceiverTakeover(avatarId), 3000);
+}
+
+async function _pollReceiverTakeover(avatarId) {
+  const since = _receiverTakeoverSince ? '?since=' + encodeURIComponent(_receiverTakeoverSince) : '';
+  let res;
+  try {
+    const r = await fetch(API + `/api/takeover/${avatarId}/receiver-status${since}`,
+      { headers: { Authorization: 'Bearer ' + token } });
+    res = await r.json();
+  } catch(e) { return; }
+  if (!res.active) {
+    clearInterval(_receiverTakeoverTimer);
+    _receiverTakeoverTimer = null;
+    return;
+  }
+  if (res.new_messages && res.new_messages.length > 0) {
+    res.new_messages.forEach(m => appendMsg('assistant', m.content, true));
+    _receiverTakeoverSince = res.new_messages[res.new_messages.length - 1].created_at;
+  }
+}
+
+// ─── 分享 & 邀请 ──────────────────────────────
+function _copyText(text, msg) {
+  const fallback = () => {
+    const ta = document.createElement('textarea');
+    ta.value = text; document.body.appendChild(ta);
+    ta.select(); document.execCommand('copy');
+    document.body.removeChild(ta);
+    toast(msg, 'success');
+  };
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(text).then(() => toast(msg, 'success')).catch(fallback);
+  } else fallback();
+}
+
+// 分享小程序得10币（每日3次）
+async function doShareRecord(btn) {
+  const code = currentUser?.user_id || '';
+  if (!code) return toast('请先登录', 'error');
+  btn.disabled = true;
+  try {
+    const res = await api('POST', '/api/coins/share/record');
+    if (res.limit_reached) {
+      toast('今日分享奖励已达上限（3次）', 'error');
+    } else {
+      toast(`+10 言己币，今日还可分享 ${res.remaining} 次`, 'success');
+      loadCoinBalance();
+      // 更新剩余次数显示
+      const el = document.getElementById('share-remaining');
+      if (el) el.textContent = res.remaining;
+    }
+  } catch(e) {
+    toast('操作失败，请重试', 'error');
+  } finally {
+    btn.disabled = false;
+  }
+  // 复制分享链接（带邀请码）
+  const link = `https://app.mianmianlife.com/app?ref=${code}`;
+  const text = `我在用「言己」，用AI替身随时和家人朋友保持联系，来注册吧！\n点击链接自动带入邀请码，注册即送30币：\n${link}`;
+  _copyText(text, '分享链接已复制，快去发给好友吧');
+}
+
+// 加载今日分享剩余次数
+async function loadShareStatus() {
+  try {
+    const res = await api('GET', '/api/coins/share/status');
+    const el = document.getElementById('share-remaining');
+    if (el) el.textContent = res.remaining;
+  } catch(e) {}
+}
+
+// 邀请码复制（不记录分享次数，仅复制）
+function copyReferralLink() {
+  const code = currentUser?.user_id || '';
+  if (!code) return toast('请先登录', 'error');
+  const link = `https://app.mianmianlife.com/app?ref=${code}`;
+  const text = `我在用「言己」，用AI替身随时和家人朋友保持联系，来注册吧！\n注册自动带入邀请码，双方各得赠币：\n${link}`;
+  _copyText(text, '邀请信息已复制');
 }
 </script>
 </body>

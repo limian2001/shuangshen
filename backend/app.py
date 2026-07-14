@@ -22,6 +22,10 @@ from backend.api.routes.ingest import ingest_bp
 from backend.api.routes.chat import chat_bp
 from backend.api.routes.topics import topics_bp
 from backend.api.routes.admin import admin_bp
+from backend.api.routes.coins import coins_bp
+from backend.api.routes.viewer import viewer_bp
+from backend.api.routes.takeover import takeover_bp
+from backend.api.routes.payment import payment_bp
 
 
 def create_app() -> Flask:
@@ -37,6 +41,10 @@ def create_app() -> Flask:
     app.register_blueprint(chat_bp)
     app.register_blueprint(topics_bp)
     app.register_blueprint(admin_bp)
+    app.register_blueprint(coins_bp)
+    app.register_blueprint(viewer_bp)
+    app.register_blueprint(takeover_bp)
+    app.register_blueprint(payment_bp)
 
     # CORS — 允许前端页面调用 API
     @app.after_request

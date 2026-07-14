@@ -354,13 +354,14 @@ tr:hover td { background: #fafaff; }
         <div class="page-body">
           <div class="toolbar">
             <input class="search-box" id="user-search" placeholder="搜索姓名 / 手机号 / 邮箱…" oninput="debounceUserSearch()" />
+            <button class="btn btn-primary btn-sm" onclick="doBatchAward()" style="margin-left:auto;white-space:nowrap">🪙 批量发币</button>
           </div>
           <div class="table-wrap">
             <table>
               <thead>
                 <tr>
                   <th>姓名</th><th>手机号</th><th>邮箱</th>
-                  <th>替身数</th><th>消息数</th>
+                  <th>替身数</th><th>消息数</th><th>言己币</th>
                   <th>状态</th><th>注册时间</th><th>操作</th>
                 </tr>
               </thead>
@@ -409,10 +410,12 @@ tr:hover td { background: #fafaff; }
       <div class="tabs">
         <div class="tab active" onclick="switchUserTab('info',this)">基本信息</div>
         <div class="tab" onclick="switchUserTab('avatars',this)">替身列表</div>
+        <div class="tab" onclick="switchUserTab('coins',this)">言己币</div>
         <div class="tab" onclick="switchUserTab('actions',this)">管理操作</div>
       </div>
       <div id="user-tab-info"></div>
       <div id="user-tab-avatars" style="display:none"></div>
+      <div id="user-tab-coins" style="display:none"></div>
       <div id="user-tab-actions" style="display:none"></div>
     </div>
   </div>
@@ -625,12 +628,13 @@ async function loadUsers() {
         <td>${u.email||'—'}</td>
         <td>${u.avatar_count}</td>
         <td>${u.msg_count}</td>
+        <td style="font-weight:600;color:var(--purple)">🪙 ${u.coins||0}</td>
         <td><span class="badge badge-${u.status||'active'}">${u.status==='suspended'?'已停用':'正常'}</span></td>
         <td style="color:var(--text-3)">${fmtDate(u.created_at)}</td>
         <td onclick="event.stopPropagation()">
           <button class="btn btn-sm" onclick="openUserModal('${u.id}')">详情</button>
         </td>
-      </tr>`).join('') || '<tr><td colspan="8" class="empty-state">无结果</td></tr>';
+      </tr>`).join('') || '<tr><td colspan="9" class="empty-state">无结果</td></tr>';
 
     renderPagination('user-pagination', d.page, d.pages, (p) => { userPage = p; loadUsers(); });
   } catch(e) { toast('加载失败: ' + e.message); }
@@ -689,6 +693,7 @@ async function openUserModal(userId) {
         <div class="info-row"><div class="info-label">昵称</div><div class="info-val">${esc(u.display_name)}</div></div>
         <div class="info-row"><div class="info-label">手机号</div><div class="info-val">${u.phone||'—'}</div></div>
         <div class="info-row"><div class="info-label">邮箱</div><div class="info-val">${u.email||'—'}</div></div>
+        <div class="info-row"><div class="info-label">言己币余额</div><div class="info-val" style="font-weight:600;color:var(--purple)">🪙 ${u.coins||0} 币</div></div>
         <div class="info-row"><div class="info-label">状态</div><div class="info-val"><span class="badge badge-${u.status||'active'}">${u.status==='suspended'?'已停用':'正常'}</span></div></div>
         <div class="info-row"><div class="info-label">权限</div><div class="info-val">${u.is_admin?'<span class="badge badge-admin">管理员</span>':'普通用户'}</div></div>
         <div class="info-row"><div class="info-label">注册时间</div><div class="info-val">${fmtDate(u.created_at)}</div></div>
@@ -716,6 +721,15 @@ async function openUserModal(userId) {
     document.getElementById('user-tab-actions').innerHTML = `
       <div style="display:flex;flex-direction:column;gap:16px;max-width:420px">
         <div class="card card-body">
+          <div class="section-h" style="margin-bottom:6px">🪙 调整言己币</div>
+          <p style="font-size:13px;color:var(--text-2);margin-bottom:10px">当前余额：<b style="color:var(--purple)">${u.coins||0} 币</b>。输入正数发币，负数扣币。</p>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <input class="form-input" id="coin-amount-input" type="number" placeholder="数量（如 10 或 -5）" style="width:100%">
+            <input class="form-input" id="coin-reason-input" type="text" placeholder="备注原因（如：活动奖励）" style="width:100%">
+            <button class="btn btn-primary" onclick="doAdjustCoins('${u.id}')">确认调整</button>
+          </div>
+        </div>
+        <div class="card card-body">
           <div class="section-h" style="margin-bottom:10px">重置密码</div>
           <div style="display:flex;gap:10px;align-items:center">
             <input class="form-input" id="reset-pwd-input" placeholder="新密码（≥6位）" type="password" style="flex:1">
@@ -741,9 +755,10 @@ async function openUserModal(userId) {
 }
 
 function switchUserTab(name, el) {
-  ['info','avatars','actions'].forEach(t => document.getElementById('user-tab-'+t).style.display = t===name?'block':'none');
+  ['info','avatars','coins','actions'].forEach(t => document.getElementById('user-tab-'+t).style.display = t===name?'block':'none');
   document.querySelectorAll('#user-modal .tab').forEach(t => t.classList.remove('active'));
   if (el) el.classList.add('active');
+  if (name === 'coins' && currentUserId) _loadCoinHistory(currentUserId);
 }
 
 // ─────────────────────────────────────────────
@@ -950,6 +965,81 @@ async function doDeleteUser(userId, name) {
       loadDashboard();
     } catch(e) { toast('操作失败: ' + e.message); }
   });
+}
+
+// ─────────────────────────────────────────────
+// 言己币管理
+// ─────────────────────────────────────────────
+async function doAdjustCoins(userId) {
+  const amount = parseInt(document.getElementById('coin-amount-input').value, 10);
+  const reason = (document.getElementById('coin-reason-input').value || '').trim() || 'admin_adjust';
+  if (!amount || isNaN(amount)) { toast('请输入有效的数量'); return; }
+  try {
+    const d = await api('POST', '/api/coins/admin/award', { user_id: userId, amount, reason });
+    toast(`已调整 ${amount > 0 ? '+' : ''}${amount} 币，共发给 ${d.awarded} 人`);
+    document.getElementById('coin-amount-input').value = '';
+    document.getElementById('coin-reason-input').value = '';
+    // 刷新流水 tab
+    _loadCoinHistory(userId);
+    // 刷新用户列表
+    loadUsers();
+  } catch(e) { toast('调整失败: ' + e.message); }
+}
+
+async function _loadCoinHistory(userId) {
+  const el = document.getElementById('user-tab-coins');
+  el.innerHTML = '<div style="padding:20px;color:var(--text-3)">加载中…</div>';
+  try {
+    const d = await api('GET', `/api/coins/admin/history/${userId}?limit=50`);
+    if (!d) return;
+    const REASON_LABELS = {
+      signup: '注册奖励', referral: '邀请奖励（送出）', referral_bonus: '邀请注册奖励',
+      share_reward: '分享小程序', purchase: '充值购买',
+      admin_award: '管理员发放', admin_adjust: '管理员调整',
+      unlock_viewer: '解锁查看绑定者', unlock_chat: '解锁聊天内容', takeover: '人工接管',
+    };
+    let html = `
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+        <div style="font-size:22px;font-weight:700;color:var(--purple)">🪙 ${d.balance} 币</div>
+        <span style="font-size:13px;color:var(--text-3)">当前余额</span>
+      </div>`;
+    if (!d.transactions.length) {
+      html += '<div class="empty-state">暂无流水记录</div>';
+    } else {
+      html += `<div class="table-wrap"><table>
+        <thead><tr><th>变动</th><th>原因</th><th>变后余额</th><th>时间</th></tr></thead><tbody>`;
+      html += d.transactions.map(t => `<tr>
+        <td style="font-weight:600;color:${t.amount>0?'var(--green, #22c55e)':'var(--red)'}">
+          ${t.amount>0?'+':''}${t.amount}
+        </td>
+        <td>${REASON_LABELS[t.reason]||t.reason}${t.ref_id?`<span style="font-size:11px;color:var(--text-3);margin-left:4px">#${t.ref_id.slice(0,8)}</span>`:''}</td>
+        <td>${t.balance_after}</td>
+        <td style="color:var(--text-3)">${fmtDate(t.created_at)}</td>
+      </tr>`).join('');
+      html += '</tbody></table></div>';
+    }
+    el.innerHTML = html;
+  } catch(e) { el.innerHTML = `<div class="empty-state">加载失败: ${e.message}</div>`; }
+}
+
+// ─────────────────────────────────────────────
+// 批量发币
+// ─────────────────────────────────────────────
+function doBatchAward() {
+  // 用 confirm modal 二次确认，但需要先收集输入
+  const amount = parseInt(prompt('批量发币：输入数量（正数=发，负数=扣）', '10'), 10);
+  if (!amount || isNaN(amount)) return;
+  const reason = prompt('备注原因（如：上线礼包）', 'launch_gift') || 'admin_award';
+  confirm2(
+    `确认向全部用户 ${amount > 0 ? '发放' : '扣除'} ${Math.abs(amount)} 言己币？原因：${reason}`,
+    async () => {
+      try {
+        const d = await api('POST', '/api/coins/admin/award', { amount, reason });
+        toast(`已完成，共调整 ${d.awarded} 个用户`);
+        loadUsers();
+      } catch(e) { toast('批量发币失败: ' + e.message); }
+    }
+  );
 }
 
 // ─────────────────────────────────────────────
