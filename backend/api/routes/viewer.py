@@ -10,6 +10,7 @@ from flask import Blueprint, request, jsonify, g
 from backend.utils.auth import require_auth, new_id
 from backend.db.database import get_db, row_to_dict, rows_to_list
 from backend.services.coins import spend_coins
+from backend.core.config import config
 
 viewer_bp = Blueprint("viewer", __name__, url_prefix="/api/viewer")
 
@@ -53,6 +54,7 @@ def unlock_status(avatar_id):
         "unlocked": bool(unlocked),
         "cost": VIEWER_STATS_COST,
         "coins": (coins_row["coins"] or 0) if coins_row else 0,
+        "free_mode": config.FREE_FEATURES,
     })
 
 
@@ -72,6 +74,15 @@ def unlock_viewer_stats(avatar_id):
         ).fetchone()
     if already:
         return jsonify({"ok": True, "already_unlocked": True})
+
+    if config.FREE_FEATURES:
+        # 推广期：免费解锁，不扣币，直接记录
+        with get_db() as conn:
+            conn.execute(
+                "INSERT OR IGNORE INTO avatar_feature_unlocks (id, user_id, avatar_id, feature) VALUES (?, ?, ?, 'viewer_stats')",
+                (new_id(), g.user_id, avatar_id),
+            )
+        return jsonify({"ok": True, "free": True})
 
     ok, balance = spend_coins(g.user_id, VIEWER_STATS_COST, "feature_unlock", avatar_id)
     if not ok:
@@ -173,12 +184,13 @@ def unlock_chat_block(avatar_id, receiver_id):
     except (ValueError, PermissionError) as e:
         return jsonify({"error": str(e)}), 403
 
-    ok, balance = spend_coins(
-        g.user_id, CHAT_BLOCK_COST, "chat_unlock",
-        f"{avatar_id}:{receiver_id}",
-    )
-    if not ok:
-        return jsonify({"error": f"言己币不足，需要 {CHAT_BLOCK_COST} 币，当前余额 {balance}"}), 402
+    if not config.FREE_FEATURES:
+        ok, balance = spend_coins(
+            g.user_id, CHAT_BLOCK_COST, "chat_unlock",
+            f"{avatar_id}:{receiver_id}",
+        )
+        if not ok:
+            return jsonify({"error": f"言己币不足，需要 {CHAT_BLOCK_COST} 币，当前余额 {balance}"}), 402
 
     with get_db() as conn:
         existing = row_to_dict(conn.execute(
@@ -200,7 +212,7 @@ def unlock_chat_block(avatar_id, receiver_id):
                 (new_id(), g.user_id, avatar_id, receiver_id, new_count),
             )
 
-    return jsonify({"ok": True, "messages_unlocked": new_count, "balance": balance})
+    return jsonify({"ok": True, "messages_unlocked": new_count, "free": config.FREE_FEATURES})
 
 
 @viewer_bp.get("/<avatar_id>/chat/<receiver_id>")

@@ -58,11 +58,8 @@ def send_message(avatar_id):
                 "UPDATE takeover_sessions SET last_receiver_msg_at=datetime('now') WHERE id=?",
                 (active_takeover["id"],),
             )
-        return jsonify({
-            "reply": None,
-            "takeover": True,
-            "message": "对方正在亲自回复你，请稍候…",
-        })
+        # 接管中：不通知接收者，保持无感知体验
+        return jsonify({"reply": None, "takeover": True})
 
     # ① 取近期对话历史（用于上下文感知 + 重复话题检测）
     history = _get_recent_history(avatar_id, g.user_id, limit=MAX_HISTORY)

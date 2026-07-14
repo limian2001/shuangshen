@@ -2,12 +2,19 @@ from __future__ import annotations
 """
 人工接管路由
 
-  POST /api/takeover/<avatar_id>/start/<receiver_id>  — 创建者开始接管（20 币/session）
-  POST /api/takeover/<session_id>/end                 — 创建者主动结束
-  POST /api/takeover/<session_id>/message             — 创建者发送消息
-  GET  /api/takeover/<avatar_id>/receiver-status      — 接收者轮询（是否在接管中 + 新消息）
-  GET  /api/takeover/<session_id>/poll                — 创建者轮询接收者新消息
-  GET  /api/takeover/my-sessions                      — 创建者查看所有活跃 session
+  GET  /api/takeover/<avatar_id>/unlock-status/<receiver_id>  — 查询接管解锁状态
+  GET  /api/takeover/<avatar_id>/recent/<receiver_id>         — 获取最近 N 条对话
+  POST /api/takeover/<avatar_id>/start/<receiver_id>          — 创建者开始接管
+  POST /api/takeover/<session_id>/end                         — 创建者主动结束
+  POST /api/takeover/<session_id>/message                     — 创建者发送消息
+  GET  /api/takeover/<avatar_id>/receiver-status              — 接收者轮询（新消息）
+  GET  /api/takeover/<session_id>/poll                        — 创建者轮询接收者新消息
+  GET  /api/takeover/my-sessions                              — 创建者查看所有活跃 session
+
+永久解锁逻辑：
+  - FREE_FEATURES=True 时永远不扣币
+  - 对于同一 creator+avatar+receiver 组合，只要曾经创建过任意 session，后续免费重入
+  - 第一次创建时（FREE_FEATURES=False）才扣币
 """
 from datetime import datetime, timedelta
 from flask import Blueprint, request, jsonify, g
@@ -15,10 +22,11 @@ from flask import Blueprint, request, jsonify, g
 from backend.utils.auth import require_auth, new_id
 from backend.db.database import get_db, row_to_dict, rows_to_list
 from backend.services.coins import spend_coins
+from backend.core.config import config
 
 takeover_bp = Blueprint("takeover", __name__, url_prefix="/api/takeover")
 
-TAKEOVER_COST      = 20  # 每次接管费用（言己币）
+TAKEOVER_COST      = 20  # 首次接管费用（言己币），FREE_FEATURES 时不生效
 INACTIVITY_MINUTES = 5   # 接收者无响应超过 5 分钟自动结束
 
 
@@ -30,6 +38,16 @@ def _get_active_session(avatar_id: str, receiver_id: str):
             "SELECT * FROM takeover_sessions WHERE avatar_id=? AND receiver_id=? AND status='active'",
             (avatar_id, receiver_id),
         ).fetchone())
+
+
+def _is_unlocked(avatar_id: str, creator_id: str, receiver_id: str) -> bool:
+    """曾经有过接管记录（任意状态） = 已解锁，可免费重入"""
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT 1 FROM takeover_sessions WHERE avatar_id=? AND creator_id=? AND receiver_id=?",
+            (avatar_id, creator_id, receiver_id),
+        ).fetchone()
+    return row is not None
 
 
 def _maybe_auto_end(session: dict) -> bool:
@@ -48,21 +66,78 @@ def _maybe_auto_end(session: dict) -> bool:
     return False
 
 
-# ─── 路由 ────────────────────────────────────────────────────────────────────
-
-@takeover_bp.post("/<avatar_id>/start/<receiver_id>")
-@require_auth
-def start_takeover(avatar_id, receiver_id):
-    """创建者开始人工接管"""
+def _assert_creator(avatar_id: str, user_id: str):
     with get_db() as conn:
         avatar = conn.execute(
             "SELECT creator_id FROM avatars WHERE id=? AND status='active'",
             (avatar_id,),
         ).fetchone()
     if not avatar:
-        return jsonify({"error": "替身不存在"}), 404
-    if avatar["creator_id"] != g.user_id:
-        return jsonify({"error": "无权限"}), 403
+        raise ValueError("替身不存在")
+    if avatar["creator_id"] != user_id:
+        raise PermissionError("无权限")
+
+
+# ─── 路由 ────────────────────────────────────────────────────────────────────
+
+@takeover_bp.get("/<avatar_id>/unlock-status/<receiver_id>")
+@require_auth
+def takeover_unlock_status(avatar_id, receiver_id):
+    """查询某对话的接管解锁状态（是否曾经解锁 / 是否有活跃 session）"""
+    try:
+        _assert_creator(avatar_id, g.user_id)
+    except (ValueError, PermissionError) as e:
+        return jsonify({"error": str(e)}), 403
+
+    active = _get_active_session(avatar_id, receiver_id)
+    unlocked = _is_unlocked(avatar_id, g.user_id, receiver_id)
+
+    with get_db() as conn:
+        coins_row = conn.execute("SELECT coins FROM users WHERE id=?", (g.user_id,)).fetchone()
+
+    return jsonify({
+        "unlocked": unlocked or config.FREE_FEATURES,
+        "active_session_id": active["id"] if active else None,
+        "cost": TAKEOVER_COST,
+        "coins": (coins_row["coins"] or 0) if coins_row else 0,
+        "free_mode": config.FREE_FEATURES,
+    })
+
+
+@takeover_bp.get("/<avatar_id>/recent/<receiver_id>")
+@require_auth
+def recent_messages(avatar_id, receiver_id):
+    """返回最近 N 条对话记录（创建者查看上下文用）"""
+    try:
+        _assert_creator(avatar_id, g.user_id)
+    except (ValueError, PermissionError) as e:
+        return jsonify({"error": str(e)}), 403
+
+    limit = min(int(request.args.get("limit", 5)), 20)
+    with get_db() as conn:
+        rows = rows_to_list(conn.execute(
+            """SELECT role, content, created_at FROM chat_messages
+               WHERE avatar_id=? AND receiver_id=?
+               ORDER BY created_at DESC LIMIT ?""",
+            (avatar_id, receiver_id, limit),
+        ).fetchall())
+    rows.reverse()  # 转为时间正序
+    return jsonify({"messages": rows})
+
+
+@takeover_bp.post("/<avatar_id>/start/<receiver_id>")
+@require_auth
+def start_takeover(avatar_id, receiver_id):
+    """
+    创建者开始人工接管。
+    - 已有活跃 session → 直接返回 session_id
+    - 已曾经接管过此对话（任意 session 记录） → 永久解锁，免费重入
+    - 全新对话 + FREE_FEATURES=False → 扣 TAKEOVER_COST 言己币
+    """
+    try:
+        _assert_creator(avatar_id, g.user_id)
+    except (ValueError, PermissionError) as e:
+        return jsonify({"error": str(e)}), 403
 
     with get_db() as conn:
         bound = conn.execute(
@@ -72,13 +147,29 @@ def start_takeover(avatar_id, receiver_id):
     if not bound:
         return jsonify({"error": "该用户尚未绑定此替身"}), 400
 
+    # 已有活跃 session → 直接返回
     existing = _get_active_session(avatar_id, receiver_id)
     if existing:
-        return jsonify({"session_id": existing["id"], "already_active": True})
+        with get_db() as conn:
+            recent = rows_to_list(conn.execute(
+                """SELECT role, content, created_at FROM chat_messages
+                   WHERE avatar_id=? AND receiver_id=?
+                   ORDER BY created_at DESC LIMIT 5""",
+                (avatar_id, receiver_id),
+            ).fetchall())
+        recent.reverse()
+        return jsonify({
+            "session_id": existing["id"],
+            "already_active": True,
+            "recent_messages": recent,
+        })
 
-    ok, balance = spend_coins(g.user_id, TAKEOVER_COST, "takeover", avatar_id)
-    if not ok:
-        return jsonify({"error": f"言己币不足，需要 {TAKEOVER_COST} 币，当前余额 {balance}"}), 402
+    # 判断是否需要扣币
+    already_unlocked = _is_unlocked(avatar_id, g.user_id, receiver_id)
+    if not already_unlocked and not config.FREE_FEATURES:
+        ok, balance = spend_coins(g.user_id, TAKEOVER_COST, "takeover", avatar_id)
+        if not ok:
+            return jsonify({"error": f"言己币不足，需要 {TAKEOVER_COST} 币，当前余额 {balance}"}), 402
 
     session_id = new_id()
     with get_db() as conn:
@@ -87,8 +178,21 @@ def start_takeover(avatar_id, receiver_id):
                VALUES (?, ?, ?, ?, 'active')""",
             (session_id, avatar_id, g.user_id, receiver_id),
         )
+        # 同步拿最近 5 条消息
+        recent = rows_to_list(conn.execute(
+            """SELECT role, content, created_at FROM chat_messages
+               WHERE avatar_id=? AND receiver_id=?
+               ORDER BY created_at DESC LIMIT 5""",
+            (avatar_id, receiver_id),
+        ).fetchall())
+    recent.reverse()
 
-    return jsonify({"session_id": session_id, "balance": balance})
+    return jsonify({
+        "session_id": session_id,
+        "already_active": False,
+        "recent_messages": recent,
+        "free": already_unlocked or config.FREE_FEATURES,
+    })
 
 
 @takeover_bp.post("/<session_id>/end")
@@ -169,7 +273,7 @@ def receiver_check_takeover(avatar_id):
 @takeover_bp.get("/<session_id>/poll")
 @require_auth
 def creator_poll(session_id):
-    """创建者轮询：拉取接收者新消息"""
+    """创建者轮询：拉取接收者新消息（含双方所有新消息）"""
     with get_db() as conn:
         session = row_to_dict(conn.execute(
             "SELECT * FROM takeover_sessions WHERE id=? AND creator_id=?",
@@ -190,7 +294,6 @@ def creator_poll(session_id):
         ).fetchall())
 
         if not ended:
-            # 更新 last_receiver_msg_at（根据最新 user 消息）
             user_msgs = [m for m in msgs if m["role"] == "user"]
             if user_msgs:
                 conn.execute(

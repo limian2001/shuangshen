@@ -933,25 +933,6 @@ body.is-mobile .row .field   { width: 100%; }
         </div>
         <div style="font-size:13px;color:var(--text-2)">查看谁绑定了该替身、消息统计、聊天记录，或进行人工接管（首次需10币解锁）</div>
       </div>
-      <!-- 分享得币 -->
-      <div class="card" style="margin-top:14px">
-        <div class="card-title">分享小程序 · 得言己币</div>
-        <div style="font-size:13px;color:var(--text-2);margin-bottom:10px">
-          每次分享得 <strong>10 币</strong>，每天最多 3 次。今日剩余：<strong id="share-remaining">--</strong> 次
-        </div>
-        <button class="btn btn-primary btn-sm" onclick="doShareRecord(this)" style="width:100%;margin-bottom:8px">🔗 分享并获得言己币</button>
-        <div style="font-size:11px;color:var(--text-3);line-height:1.6">点击后复制链接，转发给好友即可到账。每日 0 点（北京时间）重置。</div>
-      </div>
-      <!-- 邀请注册双赢 -->
-      <div class="card" style="margin-top:14px">
-        <div class="card-title">邀请好友注册 · 双方各得20币</div>
-        <div style="font-size:13px;color:var(--text-2);margin-bottom:10px">好友通过邀请链接注册，<strong>你得 20 币</strong>，<strong>好友得 30 币</strong>（含注册默认 10 币）</div>
-        <div class="share-code-box">
-          <code id="my-referral-code" style="font-size:13px;letter-spacing:0;word-break:break-all">--</code>
-          <button class="btn btn-secondary btn-sm" onclick="copyReferralLink()">复制邀请</button>
-        </div>
-        <div style="font-size:11px;color:var(--text-3);margin-top:8px;line-height:1.7">好友打开链接后自动带入邀请码，注册成功即到账，无需手动填写</div>
-      </div>
     </div>
 
   </div>
@@ -1004,7 +985,28 @@ body.is-mobile .row .field   { width: 100%; }
     <div class="purchase-packages" id="purchase-packages">
       <div style="text-align:center;color:var(--text-3);padding:20px;grid-column:span 2">加载中…</div>
     </div>
-    <button class="btn btn-secondary btn-full" onclick="closePurchaseModal()">关闭</button>
+    <!-- 免费获得言己币 -->
+    <div style="margin-top:14px;border-top:1px solid var(--border);padding-top:14px">
+      <div style="font-size:13px;font-weight:600;color:var(--text-1);margin-bottom:10px">📢 或者免费获得言己币</div>
+      <div class="card" style="margin-bottom:10px">
+        <div class="card-title">分享小程序 · 得言己币</div>
+        <div style="font-size:13px;color:var(--text-2);margin-bottom:10px">
+          每次分享得 <strong>10 币</strong>，每天最多 3 次。今日剩余：<strong id="share-remaining">--</strong> 次
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="doShareRecord(this)" style="width:100%;margin-bottom:8px">🔗 分享并获得言己币</button>
+        <div style="font-size:11px;color:var(--text-3);line-height:1.6">点击后复制链接，转发给好友即可到账。每日 0 点（北京时间）重置。</div>
+      </div>
+      <div class="card">
+        <div class="card-title">邀请好友注册 · 双方各得20币</div>
+        <div style="font-size:13px;color:var(--text-2);margin-bottom:10px">好友通过邀请链接注册，<strong>你得 20 币</strong>，<strong>好友得 30 币</strong>（含注册默认 10 币）</div>
+        <div class="share-code-box">
+          <code id="my-referral-code" style="font-size:13px;letter-spacing:0;word-break:break-all">--</code>
+          <button class="btn btn-secondary btn-sm" onclick="copyReferralLink()">复制邀请</button>
+        </div>
+        <div style="font-size:11px;color:var(--text-3);margin-top:8px;line-height:1.7">好友打开链接后自动带入邀请码，注册成功即到账，无需手动填写</div>
+      </div>
+    </div>
+    <button class="btn btn-secondary btn-full" style="margin-top:10px" onclick="closePurchaseModal()">关闭</button>
   </div>
 </div>
 
@@ -1066,10 +1068,11 @@ body.is-mobile .row .field   { width: 100%; }
         <div style="font-size:14px;font-weight:600;margin-bottom:6px">发起人工接管</div>
         <div style="font-size:13px;color:var(--text-2);margin-bottom:16px;line-height:1.7">
           接管后 AI 暂停回复，由你直接与对方对话。<br>
-          对话内容会自动存入替身记忆。<br>
+          对方无感知（不知道是 AI 还是你）。<br>
           对方超过 5 分钟无响应自动结束。
         </div>
-        <button class="btn btn-primary" onclick="doStartTakeover()">开始接管（20 言己币）</button>
+        <button class="btn btn-primary" id="takeover-start-btn" onclick="doStartTakeover()">开始接管</button>
+        <div id="takeover-cost-hint" style="font-size:11px;color:var(--text-3);margin-top:8px"></div>
       </div>
       <!-- 接管中 -->
       <div id="takeover-active-wrap" style="display:none;flex:1;flex-direction:column">
@@ -1243,7 +1246,8 @@ window.onload = () => {
   if (urlToken) {
     token = urlToken;
     const urlName = decodeURIComponent(params.get('name') || '用户');
-    currentUser = { display_name: urlName };
+    const urlUid  = params.get('uid') || undefined;
+    currentUser = { display_name: urlName, user_id: urlUid };
     localStorage.setItem('ss_token', token);
     localStorage.setItem('ss_user', JSON.stringify(currentUser));
   }
@@ -1361,6 +1365,7 @@ function showPage(page) {
   if (page === 'avatars') {
     navItems[0]?.classList.add('active');
     document.getElementById('avatar-sidebar-section').style.display = 'none';
+    loadBoundAvatarsSection();
   } else if (page === 'received') {
     navItems[1]?.classList.add('active');
     document.getElementById('avatar-sidebar-section').style.display = 'none';
@@ -1682,8 +1687,7 @@ async function sendMessage() {
   document.getElementById('send-btn').disabled = false;
 
   if (res && res.takeover) {
-    // 人工接管中：显示提示，开始接收者轮询
-    appendMsg('assistant', res.message || '对方正在亲自回复你，请稍候…', true);
+    // 人工接管中：无感知，不显示任何提示，静默等待人工回复
     startReceiverTakeoverPoll(avatarId);
   } else if (res && res.reply) {
     appendMsg('assistant', res.reply, true, res.intercepted);
@@ -2222,6 +2226,7 @@ async function doToggleRevoke() {
     toast(inactive ? '替身已重新开放' : '替身已撤回，绑定用户暂时无法对话', 'success');
     loadShareCode();
     loadAvatars();
+    loadBoundAvatarsSection();
   }
 }
 
@@ -2457,6 +2462,10 @@ async function loadCoinBalance() {
 let _packages = null;
 async function showPurchaseModal() {
   document.getElementById('purchase-modal').style.display = 'flex';
+  // 刷新邀请码 + 今日分享次数
+  const refEl = document.getElementById('my-referral-code');
+  if (refEl && currentUser?.user_id) refEl.textContent = currentUser.user_id;
+  loadShareStatus();
   if (!_packages) {
     const pkgs = await api('GET', '/api/payment/packages');
     if (pkgs) {
@@ -2649,7 +2658,33 @@ async function openTakeoverModal(receiverId, receiverName) {
   activeWrap.style.display = 'none';
   document.getElementById('takeover-modal').style.display = 'flex';
 
-  // 检查是否已有活跃 session
+  // 查询解锁状态 & 是否有活跃 session
+  if (_viewerAvatar) {
+    const status = await api('GET', `/api/takeover/${_viewerAvatar.id}/unlock-status/${receiverId}`);
+    if (status) {
+      const hint = document.getElementById('takeover-cost-hint');
+      const btn  = document.getElementById('takeover-start-btn');
+      if (status.free_mode) {
+        if (hint) hint.textContent = '推广期免费开放';
+      } else if (status.unlocked) {
+        if (hint) hint.textContent = '已解锁，免费重入';
+      } else {
+        if (hint) hint.textContent = `首次接管消耗 ${status.cost} 言己币（当前 ${status.coins} 币）`;
+      }
+      // 有活跃 session → 直接进入接管界面
+      if (status.active_session_id) {
+        _takeoverSessionId = status.active_session_id;
+        startWrap.style.display  = 'none';
+        activeWrap.style.display = 'flex';
+        activeWrap.style.flexDirection = 'column';
+        await _loadRecentMessages();
+        _startPollingTakeover();
+        return;
+      }
+    }
+  }
+
+  // 旧逻辑兜底：检查 my-sessions
   const sessions = await api('GET', '/api/takeover/my-sessions');
   if (sessions) {
     const existing = sessions.find(s =>
@@ -2674,17 +2709,29 @@ function closeTakeoverModal() {
 
 async function doStartTakeover() {
   if (!_viewerAvatar || !_takeoverReceiverId) return;
-  const res = await api('POST', `/api/takeover/${_viewerAvatar.id}/start/${_takeoverReceiverId}`);
-  if (res && res.session_id) {
-    _takeoverSessionId = res.session_id;
-    toast('接管成功！AI 已暂停', 'success');
-    loadCoinBalance();
-    const startWrap  = document.getElementById('takeover-start-wrap');
-    const activeWrap = document.getElementById('takeover-active-wrap');
-    startWrap.style.display  = 'none';
-    activeWrap.style.display = 'flex';
-    activeWrap.style.flexDirection = 'column';
-    _startPollingTakeover();
+  const btn = document.getElementById('takeover-start-btn');
+  if (btn) btn.disabled = true;
+  try {
+    const res = await api('POST', `/api/takeover/${_viewerAvatar.id}/start/${_takeoverReceiverId}`);
+    if (res && res.session_id) {
+      _takeoverSessionId = res.session_id;
+      toast('接管成功！AI 已暂停', 'success');
+      loadCoinBalance();
+      const startWrap  = document.getElementById('takeover-start-wrap');
+      const activeWrap = document.getElementById('takeover-active-wrap');
+      startWrap.style.display  = 'none';
+      activeWrap.style.display = 'flex';
+      activeWrap.style.flexDirection = 'column';
+      // 先渲染最近5条消息
+      if (res.recent_messages && res.recent_messages.length > 0) {
+        document.getElementById('takeover-chat-log').innerHTML = '';
+        res.recent_messages.forEach(m => _appendTakeoverMsg(m));
+        _takeoverLastMsgAt = res.recent_messages[res.recent_messages.length - 1].created_at;
+      }
+      _startPollingTakeover();
+    }
+  } finally {
+    if (btn) btn.disabled = false;
   }
 }
 
@@ -2714,9 +2761,22 @@ async function doTakeoverSend() {
   }
 }
 
+// 加载最近 5 条对话，供接管者了解上下文
+async function _loadRecentMessages() {
+  if (!_viewerAvatar || !_takeoverReceiverId) return;
+  try {
+    const res = await api('GET', `/api/takeover/${_viewerAvatar.id}/recent/${_takeoverReceiverId}?limit=5`);
+    if (res && res.messages && res.messages.length > 0) {
+      document.getElementById('takeover-chat-log').innerHTML = '';
+      res.messages.forEach(m => _appendTakeoverMsg(m));
+      _takeoverLastMsgAt = res.messages[res.messages.length - 1].created_at;
+    }
+  } catch(e) {}
+}
+
 function _startPollingTakeover() {
   if (_takeoverPollTimer) clearInterval(_takeoverPollTimer);
-  _takeoverLastMsgAt = '';
+  // lastMsgAt 由调用方设置（来自 recent_messages 或 _loadRecentMessages）
   _pollTakeover();
   _takeoverPollTimer = setInterval(_pollTakeover, 3000);
 }
@@ -2739,8 +2799,12 @@ async function _pollTakeover() {
     return;
   }
   if (res.messages && res.messages.length > 0) {
+    // 只显示接收者新消息（assistant 消息由 doTakeoverSend 本地追加）
     res.messages.filter(m => m.role === 'user').forEach(m => _appendTakeoverMsg(m));
     _takeoverLastMsgAt = res.messages[res.messages.length - 1].created_at;
+    // 自动滚到底
+    const log = document.getElementById('takeover-chat-log');
+    if (log) log.scrollTop = log.scrollHeight;
   }
 }
 

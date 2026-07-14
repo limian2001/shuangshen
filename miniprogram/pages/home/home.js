@@ -28,10 +28,11 @@ Page({
 
     const user    = app.globalData.userInfo || {};
     const name    = encodeURIComponent(user.display_name || '用户');
+    const uid     = encodeURIComponent(user.user_id || '');
     const baseUrl = app.globalData.apiBase;
     // ref 传入 webview，H5 页面读取后自动填入邀请码
     const refParam = ref ? `&ref=${encodeURIComponent(ref)}` : '';
-    const url     = `${baseUrl}/app?token=${token}&name=${name}${refParam}`;
+    const url     = `${baseUrl}/app?token=${token}&name=${name}&uid=${uid}${refParam}`;
 
     this.setData({ webviewUrl: url });
   },
