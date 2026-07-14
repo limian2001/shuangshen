@@ -461,8 +461,10 @@ body.is-mobile .row .field   { width: 100%; }
     <div id="page-avatars" class="page" style="display:none">
       <div class="page-header">
         <h2>我的替身</h2>
-        <p>管理你创建的所有数字分身</p>
       </div>
+      <p style="font-size:13px;color:var(--text-3);margin-bottom:16px;line-height:1.8">
+        创建你的替身，分享给指定的对方使用，对方跟你的替身聊天就像在跟你本人聊天一样。你通过人设、喂数据（历史聊天记录）、记忆点让替身更像你。
+      </p>
       <button class="btn btn-primary" onclick="showCreateAvatar()" style="margin-bottom:20px">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         创建新替身
@@ -526,6 +528,16 @@ body.is-mobile .row .field   { width: 100%; }
       </div>
 
       <div id="avatars-grid" class="avatar-grid"></div>
+
+      <!-- 绑定替身入口（始终在自己创建的替身下方） -->
+      <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
+        <button class="btn btn-secondary" onclick="openBindModal()"
+          style="width:100%;border-style:dashed;justify-content:center;gap:6px">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          绑定替身
+        </button>
+        <div id="bound-avatars-list" style="margin-top:10px"></div>
+      </div>
     </div>
 
     <!-- Page: received avatars -->
@@ -644,7 +656,7 @@ body.is-mobile .row .field   { width: 100%; }
     <div id="page-ingest" class="page" style="display:none">
       <div class="page-header">
         <h2>喂入聊天数据</h2>
-        <p>导入聊天记录，替身自动学习你的说话风格和性格特点</p>
+        <p>导入你与对方的聊天记录，数据越多替身越像你。我们承诺聊天记录只用于分析说话语气与风格，绝不透露给第三方。</p>
       </div>
 
       <div class="card">
@@ -662,14 +674,13 @@ body.is-mobile .row .field   { width: 100%; }
         <div id="ingest-tab-paste">
           <!-- 粘贴框在最上方 -->
           <div class="field" style="margin-bottom:10px">
-            <textarea id="paste-content" style="min-height:180px;font-size:12px;font-family:monospace;line-height:1.6" placeholder="把微信聊天记录粘贴到这里…
+            <textarea id="paste-content" style="min-height:180px;font-size:12px;font-family:monospace;line-height:1.6" placeholder="把聊天记录粘贴到这里…
 
-推荐：手机微信 → 长按消息 → 多选 → 复制，格式如：
-小王  2024年1月1日 09:00  妈你吃饭了没
-妈妈  2024年1月1日 09:01  吃了，你呢
+操作方法：
+微信 → 找到你与对方的对话窗口 → 长按任意一条消息 → 点「多选」→ 选中尽量多的历史记录 → 点右下角「复制」→ 粘贴到这里
 
-支持分批粘贴，每次 100+ 条均可
-暂时不支持图片语音，复制过来只保留文字部分"></textarea>
+支持分批多次粘贴，导入越多效果越好！
+（暂不支持图片/语音，复制时只保留文字部分即可）"></textarea>
           </div>
           <!-- 简洁说明 -->
           <div style="font-size:11px;color:var(--text-3);margin-bottom:12px;line-height:1.7">
@@ -838,12 +849,25 @@ body.is-mobile .row .field   { width: 100%; }
           <code id="share-code-display">加载中...</code>
           <button class="btn btn-secondary btn-sm" onclick="copyShareCode()">复制</button>
         </div>
+        <div style="margin-top:10px;background:var(--amber-light);border:1px solid rgba(133,79,11,.15);border-radius:var(--radius);padding:10px 14px;font-size:12px;color:var(--amber);line-height:1.7">
+          ⚠️ 只有接收到该码的用户才能使用该替身。为保护个人隐私，切勿分享到群聊或发给陌生人。
+        </div>
         <div style="margin-top:16px;font-size:13px;color:var(--text-2)">
           <strong>接收者操作步骤：</strong><br>
           1. 打开替身小程序，或访问 <a href="https://app.mianmianlife.com/app" target="_blank">app.mianmianlife.com/app</a><br>
           2. 注册账号<br>
           3. 进入「绑定的替身」，输入上方共享码<br>
           4. 绑定成功后即可与替身对话
+        </div>
+      </div>
+      <div class="card" style="margin-top:14px">
+        <div class="card-title">撤回替身</div>
+        <div style="font-size:13px;color:var(--text-2);margin-bottom:12px" id="revoke-desc">
+          撤回后，已绑定的用户将无法继续与该替身对话。你可以随时重新开放。
+        </div>
+        <div style="display:flex;gap:10px;align-items:center">
+          <button class="btn btn-sm" id="revoke-btn" onclick="doToggleRevoke()">撤回替身</button>
+          <span id="revoke-status" style="font-size:12px;color:var(--text-3)"></span>
         </div>
       </div>
     </div>
@@ -862,10 +886,27 @@ body.is-mobile .row .field   { width: 100%; }
       <button class="btn btn-secondary btn-sm" onclick="copyModalShareCode()">复制</button>
     </div>
     <div class="share-modal-desc">
-      将此共享码或截图发给对方 →<br>
-      对方打开「言己」→「绑定的替身」→ 输入共享码 → 即可与替身对话
+      将此共享码发给对方 → 对方打开「言己」→「绑定的替身」→ 输入共享码 → 即可与替身对话<br>
+      <span style="color:var(--amber)">⚠️ 为保护隐私，切勿分享到群聊或发给陌生人</span>
     </div>
     <button class="btn btn-secondary btn-full" onclick="closeShareModal()">关闭</button>
+  </div>
+</div>
+
+<!-- 绑定替身弹窗 -->
+<div id="bind-modal" onclick="closeBindModal()"
+  style="position:fixed;inset:0;z-index:500;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center;padding:20px">
+  <div onclick="event.stopPropagation()"
+    style="background:var(--surface);border-radius:18px;padding:24px 20px;width:min(320px,100%)">
+    <h3 style="font-size:17px;font-weight:600;margin-bottom:6px">绑定替身</h3>
+    <p style="font-size:13px;color:var(--text-3);margin-bottom:16px">输入对方分享给你的共享码</p>
+    <input type="text" id="bind-code-input" placeholder="粘贴或输入共享码"
+      style="text-align:center;font-size:16px;letter-spacing:3px;font-family:monospace" maxlength="16"
+      onkeydown="if(event.key==='Enter')doBindFromModal()">
+    <div style="display:flex;gap:8px;margin-top:16px">
+      <button class="btn btn-primary" style="flex:1" onclick="doBindFromModal()">确定绑定</button>
+      <button class="btn btn-secondary" onclick="closeBindModal()">取消</button>
+    </div>
   </div>
 </div>
 
@@ -993,12 +1034,12 @@ function updateRelUI(prefix, rel, savedCounterpart) {
   const customRow = document.getElementById(prefix + '-custom-rel-row');
   if (customRow) customRow.style.display = rel === 'custom' ? 'block' : 'none';
 
-  // 称呼 placeholder
+  // 称呼 placeholder — 更新 wrap 内所有已有 input 的 placeholder
   const hints = ADDRESS_HINTS[rel] || ADDRESS_HINTS.custom;
-  const toEl = document.getElementById(prefix + '-address-to');
-  const fromEl = document.getElementById(prefix + '-address-from');
-  if (toEl) toEl.placeholder = hints.to;
-  if (fromEl) fromEl.placeholder = hints.from;
+  const toWrap = document.getElementById(prefix + '-address-to-wrap');
+  const fromWrap = document.getElementById(prefix + '-address-from-wrap');
+  if (toWrap) toWrap.querySelectorAll('input').forEach(el => el.placeholder = hints.to);
+  if (fromWrap) fromWrap.querySelectorAll('input').forEach(el => el.placeholder = hints.from);
 }
 
 function selectCounterpart(prefix, val, btn) {
@@ -1253,11 +1294,11 @@ async function loadAvatars() {
   grid.innerHTML = list.map(a => {
     const aj = JSON.stringify(a).replace(/"/g, '&quot;');
     return `
-    <div class="avatar-card" id="avatar-card-${a.id}">
+    <div class="avatar-card" id="avatar-card-${a.id}"${a.status === 'inactive' ? ' style="opacity:.55"' : ''}>
       <div class="avatar-card-header">
         <div class="avatar-icon">${relEmoji(a.relationship)}</div>
         <div class="avatar-card-info">
-          <div class="avatar-card-name">${esc(a.name)}</div>
+          <div class="avatar-card-name">${esc(a.name)}${a.status === 'inactive' ? ' <span style="font-size:10px;color:var(--text-3);font-weight:400">[已撤回]</span>' : ''}</div>
           <div class="avatar-card-sub">
             <span class="rel-tag">${relLabel(a.relationship)}</span>
             <span class="avatar-card-status"><span class="status-dot"></span>${fmtDate(a.created_at)}</span>
@@ -1281,6 +1322,7 @@ async function loadAvatars() {
       </div>
     </div>`;
   }).join('');
+  loadBoundAvatarsSection();
 }
 
 function showCreateAvatar() {
@@ -1933,10 +1975,97 @@ async function loadShareCode() {
   if (res.share_code) {
     document.getElementById('share-code-display').textContent = res.share_code;
   }
+  // 更新撤回按钮状态
+  const inactive = currentAvatar.status === 'inactive';
+  const btn = document.getElementById('revoke-btn');
+  const statusEl = document.getElementById('revoke-status');
+  if (btn) {
+    if (inactive) {
+      btn.textContent = '重新开放';
+      btn.className = 'btn btn-secondary btn-sm';
+      if (statusEl) statusEl.textContent = '当前已撤回，绑定用户无法对话';
+    } else {
+      btn.textContent = '撤回替身';
+      btn.className = 'btn btn-danger btn-sm';
+      if (statusEl) statusEl.textContent = '';
+    }
+  }
 }
 function copyShareCode() {
   const code = document.getElementById('share-code-display').textContent;
-  navigator.clipboard.writeText(code).then(() => toast('共享码已复制', 'success'));
+  const fallback = () => {
+    const ta = document.createElement('textarea');
+    ta.value = code; document.body.appendChild(ta);
+    ta.select(); document.execCommand('copy');
+    document.body.removeChild(ta);
+    toast('共享码已复制', 'success');
+  };
+  if (navigator.clipboard) navigator.clipboard.writeText(code).then(() => toast('共享码已复制', 'success')).catch(fallback);
+  else fallback();
+}
+
+async function doToggleRevoke() {
+  if (!currentAvatar) return;
+  const inactive = currentAvatar.status === 'inactive';
+  const newStatus = inactive ? 'active' : 'inactive';
+  const label = inactive ? '重新开放' : '撤回';
+  if (!confirm(`确认${label}替身「${currentAvatar.name}」？`)) return;
+  const res = await api('PUT', '/api/avatars/' + currentAvatar.id, { status: newStatus });
+  if (res && (res.id || res.ok || res.status)) {
+    currentAvatar.status = newStatus;
+    toast(inactive ? '替身已重新开放' : '替身已撤回，绑定用户暂时无法对话', 'success');
+    loadShareCode();
+    loadAvatars();
+  }
+}
+
+// ─── 绑定替身弹窗 ─────────────────────────────
+function openBindModal() {
+  document.getElementById('bind-code-input').value = '';
+  const m = document.getElementById('bind-modal');
+  m.style.display = 'flex';
+}
+function closeBindModal() {
+  document.getElementById('bind-modal').style.display = 'none';
+}
+async function doBindFromModal() {
+  const code = document.getElementById('bind-code-input').value.trim();
+  if (!code) return toast('请输入共享码', 'error');
+  const res = await api('POST', '/api/avatars/join/' + code);
+  if (res && (res.avatar_id || res.message)) {
+    toast(res.message || '绑定成功', 'success');
+    closeBindModal();
+    loadBoundAvatarsSection();
+  }
+}
+
+async function loadBoundAvatarsSection() {
+  const el = document.getElementById('bound-avatars-list');
+  if (!el) return;
+  const list = await api('GET', '/api/avatars/received');
+  if (!list || list.length === 0) { el.innerHTML = ''; return; }
+  el.innerHTML = list.map(a => {
+    const aj = JSON.stringify(a).replace(/"/g, '&quot;');
+    return `
+    <div class="avatar-card" style="border-color:var(--border-md)">
+      <div class="avatar-card-header">
+        <div class="avatar-icon">${relEmoji(a.relationship)}</div>
+        <div class="avatar-card-info">
+          <div class="avatar-card-name">${esc(a.name)}</div>
+          <div class="avatar-card-sub">
+            <span class="rel-tag">${relLabel(a.relationship)}</span>
+            <span class="avatar-card-status" style="color:var(--text-3)">绑定于 ${fmtDate(a.bound_at)}</span>
+          </div>
+        </div>
+      </div>
+      <div class="avatar-card-actions">
+        <button class="aca-btn aca-chat" onclick="openAvatarChat(${aj})" style="flex:1">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+          开始对话
+        </button>
+      </div>
+    </div>`;
+  }).join('');
 }
 
 // ─── Identity ────────────────────────────────

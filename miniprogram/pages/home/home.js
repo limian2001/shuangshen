@@ -24,6 +24,22 @@ Page({
     this.setData({ webviewUrl: url });
   },
 
+  // 转发给朋友（定义此函数后右上角菜单的"转发"按钮才会亮起）
+  onShareAppMessage() {
+    return {
+      title: '用 AI 重现你珍视的人，随时对话',
+      path: '/pages/login/login',
+    };
+  },
+
+  // 分享到朋友圈（需在微信公众平台 → 功能设置 → 开启"分享到朋友圈"）
+  onShareTimeline() {
+    return {
+      title: '言己 — 让 AI 替身陪你说说话',
+      query: '',
+    };
+  },
+
   // web-view 向小程序发消息（目前保留，后续可扩展）
   onWebViewMessage(e) {
     const msg = e.detail.data && e.detail.data[e.detail.data.length - 1];

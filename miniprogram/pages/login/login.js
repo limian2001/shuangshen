@@ -2,6 +2,8 @@
 // 登录页 — 两步登录：openid 静默检查 → 手机号授权
 // ─────────────────────────────────────────────
 const app = getApp();
+// 兜底：即使 globalData 传递异常，也能正确拼接 URL
+const API_BASE = (app && app.globalData && app.globalData.apiBase) || 'https://app.mianmianlife.com';
 
 Page({
   data: {
@@ -32,16 +34,14 @@ Page({
         const wxCode = res.code;
         this.setData({ wxCode });
         wx.request({
-          url: app.globalData.apiBase + '/api/auth/wechat',
+          url: API_BASE + '/api/auth/wechat',
           method: 'POST',
           data: { code: wxCode },
           success: (r) => {
             if (r.statusCode === 200 && r.data) {
               if (r.data.token) {
-                // 返回用户，直接进入
                 this._saveAndGo(r.data);
               } else if (r.data.need_phone) {
-                // 新用户，展示手机号授权步骤
                 this.setData({ loading: false, step: 'need_phone' });
               } else {
                 this._showError(r.data.error || '登录失败');
@@ -78,7 +78,7 @@ Page({
       success: (res) => {
         const freshCode = res.code || this.data.wxCode;
         wx.request({
-          url: app.globalData.apiBase + '/api/auth/wechat_phone',
+          url: API_BASE + '/api/auth/wechat_phone',
           method: 'POST',
           data: {
             wx_code: freshCode,
@@ -98,7 +98,7 @@ Page({
       fail: () => {
         // wx.login 失败时用缓存 code 兜底
         wx.request({
-          url: app.globalData.apiBase + '/api/auth/wechat_phone',
+          url: API_BASE + '/api/auth/wechat_phone',
           method: 'POST',
           data: {
             wx_code: this.data.wxCode,
