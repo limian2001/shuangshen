@@ -280,6 +280,33 @@ def _run_migrations(conn: sqlite3.Connection):
             wx_order_no TEXT DEFAULT '',
             created_at TEXT DEFAULT (datetime('now'))
         )""",
+        # v1.1: 声音样本（声音克隆训练用）
+        """CREATE TABLE IF NOT EXISTS voice_samples (
+            id TEXT PRIMARY KEY,
+            avatar_id TEXT NOT NULL REFERENCES avatars(id),
+            filename TEXT NOT NULL,
+            duration_sec FLOAT DEFAULT 0,
+            file_path TEXT NOT NULL,
+            clone_voice_id TEXT DEFAULT '',
+            status TEXT DEFAULT 'pending',
+            created_at TEXT DEFAULT (datetime('now'))
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_voice_samples_avatar ON voice_samples(avatar_id)",
+        # v1.1: 图片缓存（导入聊天时的图片，仅缩略图）
+        """CREATE TABLE IF NOT EXISTS image_cache (
+            id TEXT PRIMARY KEY,
+            avatar_id TEXT NOT NULL REFERENCES avatars(id),
+            thumb_path TEXT NOT NULL,
+            description TEXT NOT NULL,
+            context_before TEXT DEFAULT '',
+            context_after TEXT DEFAULT '',
+            relevance_score REAL DEFAULT 1.0,
+            last_accessed TEXT DEFAULT (datetime('now')),
+            created_at TEXT DEFAULT (datetime('now'))
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_image_cache_avatar ON image_cache(avatar_id)",
+        # v1.1: voice_model_id 已在 SCHEMA 中, 补 voice_language 字段
+        "ALTER TABLE avatars ADD COLUMN voice_language TEXT DEFAULT 'zh'",
     ]
     for sql in migrations:
         try:

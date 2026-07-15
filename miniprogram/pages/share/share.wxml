@@ -1,0 +1,19 @@
+<view class="container">
+  <view class="icon">🔗</view>
+  <view class="title">分享言己小程序</view>
+  <view class="desc">
+    分享给好友，好友注册即送 <text class="highlight">30 言己币</text>，你同时获得 <text class="highlight">20 言己币</text>！
+  </view>
+
+  <!-- 转发给朋友 -->
+  <button class="share-btn primary" open-type="share">
+    📤 转发给朋友
+  </button>
+
+  <!-- 朋友圈分享提示 -->
+  <view class="circle-hint">
+    朋友圈分享：点右上角 ··· → 分享到朋友圈
+  </view>
+
+  <button class="share-btn secondary" bindtap="goBack">← 返回</button>
+</view>

@@ -1,17 +1,26 @@
 from __future__ import annotations
 """
-对话路由 v0.4 — 替身核心对话接口
+对话路由 v0.5 — 图片上下文注入 + 可选 TTS 同步返回
 
-流程：
-1. 取近期对话历史（12轮）
-2. 获取敏感话题提示（命中则注入 prompt，不硬拦）
-3. 构建上下文（RAG 记忆 + 对话历史 + 话题提示 + 重复检测）
-4. 调用 LLM 生成回复
-5. 存储对话历史
+Body JSON:
+  {
+    "message":           "你好",        # 用户文字（可为空，当仅发图时）
+    "image_description": "一张合影...", # 可选，来自 /api/media/vision 返回值
+    "voice":             false           # true 时同步合成并返回 audio_base64
+  }
 
-注：安全硬拦截（转账/借钱等）已移除。
-    产品定位为熟人间通信，不存在金融欺诈场景。
+Returns:
+  {
+    "reply":                  "...",
+    "retrieved_memory_count": 3,
+    "audio_base64":           "...",  # 仅 voice=true 且成功时
+    "audio_error":            "..."   # 仅 voice=true 且 TTS 失败时
+  }
+
+人工接管中：返回 {"reply": null, "takeover": true}
 """
+import base64
+
 from flask import Blueprint, request, jsonify, g
 
 from backend.utils.auth import require_auth, new_id
@@ -19,6 +28,7 @@ from backend.db.database import get_db, row_to_dict, rows_to_list
 from backend.services.topic_guard import get_topic_hints
 from backend.services.persona_builder import get_chat_context
 from backend.services.llm_provider import llm
+from backend.services.media import tts_synthesize
 from backend.core.config import config
 
 chat_bp = Blueprint("chat", __name__, url_prefix="/api/chat")
@@ -29,18 +39,16 @@ MAX_HISTORY = 12  # LLM 上下文最多带入轮数
 @chat_bp.post("/<avatar_id>")
 @require_auth
 def send_message(avatar_id):
-    """
-    与替身对话。
-
-    Body: {"message": "你好"}
-    Returns: {"reply": "...", "retrieved_memory_count": int}
-    """
+    """与替身对话。"""
     if not _receiver_can_chat(avatar_id, g.user_id):
         return jsonify({"error": "你还没有绑定这个替身，请先获取共享码并绑定"}), 403
 
-    data = request.get_json() or {}
-    message = (data.get("message") or "").strip()
-    if not message:
+    data              = request.get_json() or {}
+    message           = (data.get("message") or "").strip()
+    image_description = (data.get("image_description") or "").strip()
+    want_voice        = bool(data.get("voice", False))
+
+    if not message and not image_description:
         return jsonify({"error": "消息不能为空"}), 400
 
     # ── 检查人工接管 ──────────────────────────────────────────────────────────
@@ -50,39 +58,49 @@ def send_message(avatar_id):
             (avatar_id, g.user_id),
         ).fetchone()
     if active_takeover:
-        # 接管中：存储接收者消息，但不调用 LLM；返回接管标志
-        _save_message(avatar_id, g.user_id, "user", message)
-        # 更新 last_receiver_msg_at
+        _save_message(avatar_id, g.user_id, "user", message or f"[图片] {image_description[:50]}")
         with get_db() as _tc:
             _tc.execute(
                 "UPDATE takeover_sessions SET last_receiver_msg_at=datetime('now') WHERE id=?",
                 (active_takeover["id"],),
             )
-        # 接管中：不通知接收者，保持无感知体验
         return jsonify({"reply": None, "takeover": True})
 
-    # ① 取近期对话历史（用于上下文感知 + 重复话题检测）
+    # ① 取近期对话历史
     history = _get_recent_history(avatar_id, g.user_id, limit=MAX_HISTORY)
 
-    # ② 获取敏感话题提示（命中则生成提示字符串，注入 prompt）
+    # ② 获取敏感话题提示（用原始 message 检索，不含图片描述）
     topic_hints = get_topic_hints(avatar_id, message)
     if topic_hints:
         print(f"[TOPIC_HINT] avatar={avatar_id[:8]} hint_len={len(topic_hints)}")
 
-    # ③ 构建对话上下文（RAG + 上下文感知 + 话题提示）
+    # ③ 构建对话上下文（RAG 检索用原始 message，图片描述不污染向量）
+    rag_query = message or image_description
     try:
         system_prompt, retrieved_memories = get_chat_context(
             avatar_id=avatar_id,
-            user_query=message,
+            user_query=rag_query,
             recent_history=history,
             topic_hints=topic_hints,
         )
     except ValueError as e:
         return jsonify({"error": str(e)}), 404
 
+    # ④ 构建 LLM 消息（图片描述注入当轮 user content）
+    if image_description:
+        llm_content = f"[我发了一张图片，内容：{image_description}]"
+        if message:
+            llm_content += f"\n{message}"
+    else:
+        llm_content = message
+
+    messages = history + [{"role": "user", "content": llm_content}]
+    print(
+        f"[LLM] avatar={avatar_id[:8]} history={len(history)} "
+        f"memories={len(retrieved_memories)} voice={want_voice} img={'Y' if image_description else 'N'}"
+    )
+
     # ④ 调用 LLM
-    messages = history + [{"role": "user", "content": message}]
-    print(f"[LLM] avatar={avatar_id[:8]} history={len(history)} memories={len(retrieved_memories)}")
     try:
         reply = llm.chat(
             system_prompt=system_prompt,
@@ -95,14 +113,34 @@ def send_message(avatar_id):
     except Exception as e:
         return jsonify({"error": f"LLM 调用失败: {str(e)}"}), 500
 
-    # ⑤ 存储对话历史
-    _save_message(avatar_id, g.user_id, "user", message)
+    # ⑤ 存储对话历史（存原始 message，图片仅保留前缀标记）
+    history_text = message if message else f"[图片] {image_description[:50]}"
+    _save_message(avatar_id, g.user_id, "user", history_text)
     _save_message(avatar_id, g.user_id, "assistant", reply)
 
-    return jsonify({
-        "reply": reply,
+    # ⑥ 构建响应
+    response: dict = {
+        "reply":                  reply,
         "retrieved_memory_count": len(retrieved_memories),
-    })
+    }
+
+    # ⑦ 可选：同步合成 TTS，返回 base64 MP3（失败不影响文字回复）
+    if want_voice:
+        try:
+            with get_db() as conn:
+                av = row_to_dict(conn.execute(
+                    "SELECT voice_model_id, voice_language FROM avatars WHERE id=?",
+                    (avatar_id,),
+                ).fetchone())
+            voice_id = (av.get("voice_model_id") if av else None) or None
+            language = (av.get("voice_language") if av else None) or "zh"
+            audio_bytes = tts_synthesize(reply[:500], voice_id=voice_id, language=language)
+            response["audio_base64"] = base64.b64encode(audio_bytes).decode()
+        except Exception as e:
+            print(f"[TTS] 合成失败（不影响文字回复）: {e}")
+            response["audio_error"] = str(e)
+
+    return jsonify(response)
 
 
 @chat_bp.get("/<avatar_id>/history")

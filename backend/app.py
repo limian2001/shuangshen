@@ -26,6 +26,7 @@ from backend.api.routes.coins import coins_bp
 from backend.api.routes.viewer import viewer_bp
 from backend.api.routes.takeover import takeover_bp
 from backend.api.routes.payment import payment_bp
+from backend.api.routes.media import media_bp
 
 
 def create_app() -> Flask:
@@ -45,6 +46,7 @@ def create_app() -> Flask:
     app.register_blueprint(viewer_bp)
     app.register_blueprint(takeover_bp)
     app.register_blueprint(payment_bp)
+    app.register_blueprint(media_bp)
 
     # CORS — 允许前端页面调用 API
     @app.after_request
@@ -118,8 +120,8 @@ def create_app() -> Flask:
 <h2>一、我们收集的信息</h2>
 <p><strong>手机号码：</strong>用于账号注册与身份识别，不会对外泄露。</p>
 <p><strong>剪贴板内容：</strong>仅在您主动粘贴聊天记录时读取，用于导入数据。</p>
-<p><strong>图片：</strong>目前暂不支持图片上传，相关权限为未来功能预留。</p>
-<p><strong>麦克风：</strong>目前暂不支持语音功能，相关权限为未来功能预留。</p>
+<p><strong>图片：</strong>您在对话中发送的图片仅用于 AI 理解图片内容以生成回复，不用于其他用途。</p>
+<p><strong>麦克风：</strong>仅在您主动点击录音时使用，录音内容转文字后用于对话，不存储原始音频。声音样本（声音克隆）仅存储在您账号下，不共享给第三方。</p>
 <h2>二、信息使用方式</h2>
 <p>您上传的聊天记录仅用于生成对应 AI 角色的风格特征，存储在您的账号下，不共享给第三方。</p>
 <h2>三、信息存储与安全</h2>

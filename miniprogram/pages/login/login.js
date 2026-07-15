@@ -168,7 +168,15 @@ Page({
 
   _goHome() {
     const ref = this.data.refCode;
-    const url = ref ? `/pages/home/home?ref=${ref}` : '/pages/home/home';
-    wx.redirectTo({ url });
+    // 如果是从 home 落地页进来的，navigateBack 即可（home.onShow 会自动刷新 webview）
+    // 如果是冷启动直接进 login，则 redirectTo home
+    const pages = getCurrentPages();
+    if (pages.length > 1) {
+      if (ref) app.globalData.pendingRefCode = ref;
+      wx.navigateBack({ delta: 1 });
+    } else {
+      const url = ref ? `/pages/home/home?ref=${ref}` : '/pages/home/home';
+      wx.redirectTo({ url });
+    }
   },
 });

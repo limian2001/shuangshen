@@ -158,9 +158,25 @@ select { cursor: pointer; }
 .msg.user .msg-time { text-align: left; }
 .intercept-badge { font-size: 10px; background: var(--amber-light); color: var(--amber); padding: 1px 6px; border-radius: 3px; margin-left: 6px; }
 #chat-input-wrap { padding: 14px 20px; border-top: 1px solid var(--border); background: var(--surface); flex-shrink: 0; }
-#chat-input-row { display: flex; gap: 10px; align-items: flex-end; }
+#chat-input-row { display: flex; gap: 8px; align-items: flex-end; }
 #chat-input { flex: 1; padding: 10px 14px; border: 1px solid var(--border-md); border-radius: 10px; font-size: 14px; font-family: inherit; resize: none; min-height: 42px; max-height: 120px; outline: none; }
 #chat-input:focus { border-color: var(--purple-mid); box-shadow: 0 0 0 3px rgba(83,74,183,.1); }
+.media-btn { width: 42px; height: 42px; border-radius: 10px; border: 1px solid var(--border-md); background: var(--surface); display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 18px; flex-shrink: 0; transition: background .15s; }
+.media-btn:hover { background: var(--purple-light); border-color: var(--purple-mid); }
+.media-btn.recording { background: #fee2e2; border-color: #f87171; animation: pulse-record 1s infinite; }
+@keyframes pulse-record { 0%,100% { opacity: 1; } 50% { opacity: .6; } }
+.chat-image-preview { display: flex; align-items: center; gap: 8px; padding: 6px 0 2px; }
+.chat-image-preview img { width: 56px; height: 56px; object-fit: cover; border-radius: 8px; border: 1px solid var(--border-md); }
+.chat-image-preview .remove-img { font-size: 12px; color: var(--text-3); cursor: pointer; padding: 2px 6px; }
+.msg-audio { margin-top: 5px; }
+.msg-audio audio { width: 100%; max-width: 220px; height: 32px; border-radius: 16px; }
+.msg-voice-toggle { font-size: 11px; color: var(--purple); cursor: pointer; margin-top: 2px; display: inline-block; opacity: .8; }
+.msg-voice-toggle:hover { opacity: 1; }
+.voice-sample-list { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.voice-sample-item { display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: var(--bg); border-radius: 8px; border: 1px solid var(--border); font-size: 13px; }
+.vs-pending,.vs-uploading,.vs-training { background: var(--purple-light); color: var(--purple); font-size: 11px; padding: 2px 7px; border-radius: 4px; }
+.vs-ready { background: #d1fae5; color: #065f46; font-size: 11px; padding: 2px 7px; border-radius: 4px; }
+.vs-failed { background: #fee2e2; color: #991b1b; font-size: 11px; padding: 2px 7px; border-radius: 4px; }
 .typing { display: flex; align-items: center; gap: 6px; color: var(--text-3); font-size: 13px; padding: 8px 0; }
 .dot-anim { display: flex; gap: 3px; }
 .dot-anim span { width: 5px; height: 5px; border-radius: 50%; background: var(--text-3); animation: bounce 1.2s infinite; }
@@ -408,15 +424,7 @@ body.is-mobile .row .field   { width: 100%; }
       <div class="field"><label>手机号</label><input type="tel" id="l-phone" placeholder="13800000000"></div>
       <div class="field"><label>密码</label><input type="password" id="l-pwd" placeholder="请输入密码"></div>
       <button class="btn btn-primary btn-full" onclick="doLogin()">登录</button>
-      <p class="auth-toggle">还没有账号？<a onclick="showRegister()">立即注册</a></p>
-    </div>
-    <div id="register-form" style="display:none">
-      <div class="field"><label>你的名字</label><input type="text" id="r-name" placeholder="如：小王"></div>
-      <div class="field"><label>手机号</label><input type="tel" id="r-phone" placeholder="13800000000"></div>
-      <div class="field"><label>密码（至少6位）</label><input type="password" id="r-pwd" placeholder="请设置密码"></div>
-      <div class="field"><label>邀请码（选填）</label><input type="text" id="r-referral" placeholder="朋友的邀请码（选填）"></div>
-      <button class="btn btn-primary btn-full" onclick="doRegister()">注册</button>
-      <p class="auth-toggle">已有账号？<a onclick="showLogin()">立即登录</a></p>
+      <p class="auth-toggle" style="color:var(--text-3)">普通用户请使用微信小程序注册登录</p>
     </div>
   </div>
 </div>
@@ -474,6 +482,10 @@ body.is-mobile .row .field   { width: 100%; }
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
           人设信息
         </div>
+        <div class="avatar-nav-item" id="snav-voice" onclick="showAvatarPage('voice')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+          声音
+        </div>
         <div class="avatar-nav-item" id="snav-share" onclick="showAvatarPage('share')">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
           共享
@@ -509,6 +521,7 @@ body.is-mobile .row .field   { width: 100%; }
       <div class="m-subnav-item"        id="msnav-memories" onclick="showAvatarPage('memories')">记忆</div>
       <div class="m-subnav-item"        id="msnav-ingest"   onclick="showAvatarPage('ingest')">喂数据</div>
       <div class="m-subnav-item"        id="msnav-identity" onclick="showAvatarPage('identity')">人设</div>
+      <div class="m-subnav-item"        id="msnav-voice"    onclick="showAvatarPage('voice')">声音</div>
       <div class="m-subnav-item"        id="msnav-share"    onclick="showAvatarPage('share')">共享</div>
     </div>
 
@@ -621,9 +634,33 @@ body.is-mobile .row .field   { width: 100%; }
             <div style="font-size:11px;color:var(--text-3)" id="chat-avatar-rel">关系</div>
           </div>
         </div>
+        <!-- 合规说明：AI生成内容标注 -->
+        <div id="ai-gen-notice" style="
+          background:rgba(83,74,183,.07);
+          border-bottom:1px solid rgba(83,74,183,.12);
+          padding:6px 14px;
+          font-size:11px;
+          color:var(--text-3);
+          text-align:center;
+          letter-spacing:.3px;
+          flex-shrink:0;
+        ">🤖 以下内容由人工智能生成，仅供参考</div>
         <div id="chat-messages"></div>
         <div id="chat-input-wrap">
+          <!-- 图片预览 -->
+          <div id="chat-image-preview" class="chat-image-preview" style="display:none">
+            <img id="chat-image-thumb" src="" alt="图片">
+            <div>
+              <div id="chat-image-desc" style="font-size:12px;color:var(--text-3);max-width:160px;line-height:1.4"></div>
+              <span class="remove-img" onclick="removeChatImage()">✕ 移除</span>
+            </div>
+          </div>
           <div id="chat-input-row">
+            <!-- 录音按钮 -->
+            <button class="media-btn" id="voice-btn" title="语音输入" onclick="toggleVoiceRecording()">🎤</button>
+            <!-- 图片按钮 -->
+            <button class="media-btn" title="发送图片" onclick="document.getElementById('chat-img-input').click()">🖼️</button>
+            <input type="file" id="chat-img-input" accept="image/*" style="display:none" onchange="handleChatImage(this)">
             <textarea id="chat-input" placeholder="输入消息，Enter 发送，Shift+Enter 换行" rows="1"></textarea>
             <button class="btn btn-primary" id="send-btn" onclick="sendMessage()">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
@@ -892,6 +929,60 @@ body.is-mobile .row .field   { width: 100%; }
     </div>
 
     <!-- Page: share -->
+    <!-- ── 声音克隆页 ── -->
+    <div id="page-voice" class="page" style="display:none">
+      <div class="page-header">
+        <h2>替身声音</h2>
+        <p>上传真实人物的声音样本，让替身用 TA 的声音说话。接收者对话时默认播放语音，点击消息可切换文字。</p>
+      </div>
+
+      <!-- 克隆状态 -->
+      <div class="card" id="voice-clone-status-card">
+        <div class="card-title">声音克隆状态</div>
+        <div id="voice-clone-status-text" style="font-size:13px;color:var(--text-2)">加载中...</div>
+      </div>
+
+      <!-- 上传样本 -->
+      <div class="card" style="margin-top:14px">
+        <div class="card-title">上传声音样本</div>
+        <div style="font-size:13px;color:var(--text-2);margin-bottom:12px;line-height:1.7">
+          上传 TA 说话的录音，每次上传自动触发重新训练。<br>
+          <strong>要求：</strong>MP3/WAV/M4A · 单段至少10秒 · 背景安静 · 最多5个样本<br>
+          <strong>效果越好的条件：</strong>发音清晰 · 语速自然 · 总时长越长越好（建议 1 分钟以上）
+        </div>
+
+        <!-- 语言选择 -->
+        <div class="field" style="margin-bottom:12px">
+          <label>声音语言</label>
+          <select id="voice-lang-select" style="padding:6px 10px;border:1px solid var(--border-md);border-radius:6px;font-size:13px">
+            <option value="zh">普通话</option>
+            <option value="yue">粤语</option>
+            <option value="en">英语</option>
+          </select>
+        </div>
+
+        <label class="btn btn-secondary" style="cursor:pointer;display:inline-flex;align-items:center;gap:6px">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><line x1="12" y1="19" x2="12" y2="23"/></svg>
+          选择声音文件
+          <input type="file" id="voice-sample-file" accept=".mp3,.wav,.m4a,.aac,.ogg" style="display:none" onchange="uploadVoiceSample(this)">
+        </label>
+
+        <!-- 已上传样本列表 -->
+        <div class="voice-sample-list" id="voice-sample-list"></div>
+      </div>
+
+      <!-- 试听 -->
+      <div class="card" style="margin-top:14px">
+        <div class="card-title">试听效果</div>
+        <div style="font-size:13px;color:var(--text-2);margin-bottom:12px">输入一句话，用替身声音合成试听</div>
+        <div style="display:flex;gap:8px">
+          <input type="text" id="tts-preview-text" placeholder="例：你好，最近还好吗？" style="flex:1;padding:8px 12px;border:1px solid var(--border-md);border-radius:8px;font-size:13px">
+          <button class="btn btn-secondary" onclick="previewTTS()">试听</button>
+        </div>
+        <div id="tts-preview-player" style="margin-top:10px"></div>
+      </div>
+    </div>
+
     <div id="page-share" class="page" style="display:none">
       <div class="page-header">
         <h2>共享替身</h2>
@@ -909,10 +1000,9 @@ body.is-mobile .row .field   { width: 100%; }
         </div>
         <div style="margin-top:16px;font-size:13px;color:var(--text-2)">
           <strong>接收者操作步骤：</strong><br>
-          1. 打开替身小程序，或访问 <a href="https://app.mianmianlife.com/app" target="_blank">app.mianmianlife.com/app</a><br>
-          2. 注册账号<br>
-          3. 进入「绑定的替身」，输入上方共享码<br>
-          4. 绑定成功后即可与替身对话
+          1. 打开「言己」微信小程序，注册登录<br>
+          2. 进入「绑定的替身」，输入上方共享码<br>
+          3. 绑定成功后即可与替身对话
         </div>
       </div>
       <div class="card" style="margin-top:14px">
@@ -1001,9 +1091,9 @@ body.is-mobile .row .field   { width: 100%; }
         <div style="font-size:13px;color:var(--text-2);margin-bottom:10px">好友通过邀请链接注册，<strong>你得 20 币</strong>，<strong>好友得 30 币</strong>（含注册默认 10 币）</div>
         <div class="share-code-box">
           <code id="my-referral-code" style="font-size:13px;letter-spacing:0;word-break:break-all">--</code>
-          <button class="btn btn-secondary btn-sm" onclick="copyReferralLink()">复制邀请</button>
+          <button class="btn btn-secondary btn-sm" onclick="copyReferralLink()">复制邀请码</button>
         </div>
-        <div style="font-size:11px;color:var(--text-3);margin-top:8px;line-height:1.7">好友打开链接后自动带入邀请码，注册成功即到账，无需手动填写</div>
+        <div style="font-size:11px;color:var(--text-3);margin-top:8px;line-height:1.7">复制邀请码发给好友，好友注册时填入，双方注册成功即到账</div>
       </div>
     </div>
     <button class="btn btn-secondary btn-full" style="margin-top:10px" onclick="closePurchaseModal()">关闭</button>
@@ -1258,13 +1348,7 @@ window.onload = () => {
     loadAvatars();
   } else {
     showAuth();
-    // 有邀请码则直接到注册页，否则到登录页
-    const urlRef = params.get('ref');
-    if (urlRef) {
-      showRegister();  // showRegister 内会自动填入 urlRef
-    } else {
-      showLogin();
-    }
+    showLogin();
   }
 };
 
@@ -1283,37 +1367,11 @@ function showApp() {
 }
 function showLogin() {
   document.getElementById('auth-title').textContent = '欢迎回来';
-  document.getElementById('auth-sub').textContent = '登录你的替身账号';
+  document.getElementById('auth-sub').textContent = '管理员登录';
   document.getElementById('login-form').style.display = 'block';
-  document.getElementById('register-form').style.display = 'none';
-}
-function showRegister() {
-  document.getElementById('auth-title').textContent = '创建账号';
-  document.getElementById('auth-sub').textContent = '开始创建你的数字替身';
-  document.getElementById('login-form').style.display = 'none';
-  document.getElementById('register-form').style.display = 'block';
-  // 从 URL 参数自动带入邀请码
-  const urlRef = new URLSearchParams(window.location.search).get('ref') || '';
-  if (urlRef) {
-    const el = document.getElementById('r-referral');
-    if (el && !el.value) el.value = urlRef;
-  }
 }
 
 // ─── Auth ────────────────────────────────────
-async function doRegister() {
-  const name = v('r-name'), phone = v('r-phone'), pwd = v('r-pwd');
-  const referral_code = v('r-referral').trim();
-  if (!name || !phone || !pwd) return toast('请填写所有字段', 'error');
-  const res = await api('POST', '/api/auth/register', { display_name: name, phone, password: pwd, referral_code });
-  if (res.token) {
-    saveAuth(res);
-    showApp();
-    showPage('avatars');
-    loadAvatars();
-    toast('注册成功，欢迎 ' + name + '！', 'success');
-  }
-}
 async function doLogin() {
   const phone = v('l-phone'), pwd = v('l-pwd');
   if (!phone || !pwd) return toast('请填写账号和密码', 'error');
@@ -1392,11 +1450,11 @@ function showAvatarPage(sub) {
   document.getElementById('mobile-page-title').textContent = currentAvatar.name || '替身';
   document.getElementById('mobile-subnav').classList.add('active');
   // 更新子导航激活状态
-  ['chat','memories','ingest','identity','share'].forEach(s => {
+  ['chat','memories','ingest','identity','voice','share'].forEach(s => {
     document.getElementById('msnav-' + s)?.classList.toggle('active', s === sub);
   });
 
-  const subs = ['chat','memories','ingest','identity','share'];
+  const subs = ['chat','memories','ingest','identity','voice','share'];
   subs.forEach(s => {
     const el = document.getElementById('page-' + s);
     if (el) el.style.display = 'none';
@@ -1411,6 +1469,7 @@ function showAvatarPage(sub) {
   if (sub === 'ingest') { switchIngestTab('paste'); loadIngestJobs(); }
   if (sub === 'share') loadShareCode();
   if (sub === 'identity') loadIdentity();
+  if (sub === 'voice') loadVoiceStatus();
 }
 
 // 设置当前替身（不导航，只更新状态）
@@ -1664,11 +1723,21 @@ async function loadChatHistory() {
       _renderMessages(msgs);
     }
   }
+
+  // ③ 检查是否有声音克隆（不阻塞页面加载）
+  checkAvatarVoice();
 }
 
 async function sendMessage() {
   const input = document.getElementById('chat-input');
-  const text = input.value.trim();
+  let text = input.value.trim();
+
+  // 注入图片描述（若有待发图片）
+  if (_pendingImageDesc) {
+    text = (text ? text + '\n' : '') + '[图片：' + _pendingImageDesc + ']';
+    removeChatImage();
+  }
+
   if (!text || !currentAvatar) return;
   const avatarId = currentAvatar.id;
   input.value = '';
@@ -1697,19 +1766,44 @@ async function sendMessage() {
   }
 }
 
+let _msgIdx = 0;
+const _msgVoiceMode = {};
+
 function appendMsg(role, content, animate, intercepted) {
   const box = document.getElementById('chat-messages');
   const isUser = role === 'user';
   const div = document.createElement('div');
   div.className = 'msg ' + (isUser ? 'user' : 'bot') + (intercepted ? ' intercepted' : '');
   const initials = isUser ? (currentUser?.display_name?.[0] || '我') : (currentAvatar?.name?.[0] || '?');
+  const idx = _msgIdx++;
+  div.dataset.msgIdx = idx;
+
+  const bubbleHtml = `${esc(renderEmoji(content)).replace(/\n/g,'<br>')}${intercepted ? '<span class="intercept-badge">已拦截</span>' : ''}`;
+  const aiBadge = isUser ? '' : '<span style="display:block;font-size:10px;color:var(--text-3);margin-top:3px;text-align:right">AI 生成</span>';
+
+  // TTS 控件只在 bot 消息且替身有声音克隆时显示
+  const voiceCtrl = (!isUser && _avatarHasVoice)
+    ? `<div class="msg-audio" id="audio-wrap-${idx}" style="display:none"><audio id="audio-${idx}" controls></audio></div><span class="msg-voice-toggle" data-idx="${idx}">🔊 点击播放语音</span>`
+    : aiBadge;
+
   div.innerHTML = `
     <div class="msg-avatar">${initials}</div>
     <div>
-      <div class="msg-bubble">${esc(renderEmoji(content)).replace(/\n/g,'<br>')}${intercepted ? '<span class="intercept-badge">已拦截</span>' : ''}</div>
+      <div class="msg-bubble" id="bubble-${idx}">${bubbleHtml}</div>
+      ${voiceCtrl}
     </div>`;
+
   if (animate) div.style.animation = 'none';
   box.appendChild(div);
+
+  // 绑定 toggle 事件
+  if (!isUser && _avatarHasVoice) {
+    const toggleEl = div.querySelector('.msg-voice-toggle');
+    if (toggleEl) toggleEl.addEventListener('click', () => toggleMsgVoice(idx, content));
+    _msgVoiceMode[idx] = 'voice';
+    _loadTTS(idx, content);
+  }
+
   scrollBottom();
 }
 
@@ -2863,8 +2957,11 @@ function _copyText(text, msg) {
 
 // 分享小程序得10币（每日3次）
 async function doShareRecord(btn) {
-  const code = currentUser?.user_id || '';
-  if (!code) return toast('请先登录', 'error');
+  if (!token) return toast('请先登录', 'error');
+  // 仅在微信小程序内有效
+  if (window.__wxjs_environment !== 'miniprogram') {
+    return toast('此功能仅在微信小程序中使用', 'info');
+  }
   btn.disabled = true;
   try {
     const res = await api('POST', '/api/coins/share/record');
@@ -2873,19 +2970,16 @@ async function doShareRecord(btn) {
     } else {
       toast(`+10 言己币，今日还可分享 ${res.remaining} 次`, 'success');
       loadCoinBalance();
-      // 更新剩余次数显示
       const el = document.getElementById('share-remaining');
       if (el) el.textContent = res.remaining;
+      // 跳转至小程序分享页（用户在那里选择转发对象）
+      wx.miniProgram.navigateTo({ url: '/pages/share/share' });
     }
   } catch(e) {
     toast('操作失败，请重试', 'error');
   } finally {
     btn.disabled = false;
   }
-  // 复制分享链接（带邀请码）
-  const link = `https://app.mianmianlife.com/app?ref=${code}`;
-  const text = `我在用「言己」，用AI替身随时和家人朋友保持联系，来注册吧！\n点击链接自动带入邀请码，注册即送30币：\n${link}`;
-  _copyText(text, '分享链接已复制，快去发给好友吧');
 }
 
 // 加载今日分享剩余次数
@@ -2897,14 +2991,342 @@ async function loadShareStatus() {
   } catch(e) {}
 }
 
-// 邀请码复制（不记录分享次数，仅复制）
+// 邀请码复制（仅复制邀请码本身，供好友注册时填入）
 function copyReferralLink() {
   const code = currentUser?.user_id || '';
   if (!code) return toast('请先登录', 'error');
-  const link = `https://app.mianmianlife.com/app?ref=${code}`;
-  const text = `我在用「言己」，用AI替身随时和家人朋友保持联系，来注册吧！\n注册自动带入邀请码，双方各得赠币：\n${link}`;
-  _copyText(text, '邀请信息已复制');
+  _copyText(code, '邀请码已复制，发给好友填写即可');
 }
+
+// ─── 语音输入 (STT) ──────────────────────────────────────────
+let _mediaRecorder = null;
+let _audioChunks = [];
+let _isRecording = false;
+
+async function toggleVoiceRecording() {
+  if (_isRecording) {
+    _stopRecording();
+  } else {
+    await _startRecording();
+  }
+}
+
+async function _startRecording() {
+  if (!navigator.mediaDevices?.getUserMedia) {
+    toast('当前环境不支持录音，请直接输入文字', 'error');
+    return;
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    _audioChunks = [];
+    _mediaRecorder = new MediaRecorder(stream, { mimeType: _getSupportedMime() });
+    _mediaRecorder.ondataavailable = e => { if (e.data.size > 0) _audioChunks.push(e.data); };
+    _mediaRecorder.onstop = _handleRecordingStop;
+    _mediaRecorder.start();
+    _isRecording = true;
+    const btn = document.getElementById('voice-btn');
+    if (btn) { btn.classList.add('recording'); btn.title = '点击停止录音'; btn.textContent = '⏹️'; }
+    toast('录音中，再次点击停止…', 'info');
+  } catch (e) {
+    toast('无法访问麦克风：' + (e.message || e), 'error');
+  }
+}
+
+function _stopRecording() {
+  if (_mediaRecorder && _isRecording) {
+    _mediaRecorder.stop();
+    _mediaRecorder.stream?.getTracks().forEach(t => t.stop());
+    _isRecording = false;
+    const btn = document.getElementById('voice-btn');
+    if (btn) { btn.classList.remove('recording'); btn.title = '语音输入'; btn.textContent = '🎤'; }
+  }
+}
+
+async function _handleRecordingStop() {
+  const mime = _getSupportedMime();
+  const blob = new Blob(_audioChunks, { type: mime });
+  if (blob.size < 1000) { toast('录音太短，请重试', 'error'); return; }
+
+  toast('识别中…', 'info');
+  const formData = new FormData();
+  formData.append('audio', blob, 'recording.' + (mime.includes('webm') ? 'webm' : 'mp4'));
+  formData.append('language', 'zh');   // TODO: 按用户设置
+
+  try {
+    const resp = await fetch(API + '/api/media/stt', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + token },
+      body: formData,
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || '识别失败');
+    const input = document.getElementById('chat-input');
+    if (data.text) {
+      input.value = (input.value + data.text).trim();
+      input.style.height = 'auto';
+      input.style.height = Math.min(input.scrollHeight, 120) + 'px';
+      toast('识别完成', 'success');
+    } else {
+      toast('未识别到语音，请重试', 'error');
+    }
+  } catch (e) {
+    toast('语音识别失败：' + e.message, 'error');
+  }
+}
+
+function _getSupportedMime() {
+  const mimes = ['audio/webm;codecs=opus','audio/webm','audio/ogg;codecs=opus','audio/mp4'];
+  for (const m of mimes) { if (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(m)) return m; }
+  return 'audio/webm';
+}
+
+// ─── 图片上传 (Vision) ───────────────────────────────────────
+let _pendingImageDesc = null;
+let _pendingImageThumbId = null;
+
+async function handleChatImage(input) {
+  const file = input.files[0];
+  if (!file) return;
+  if (file.size > 20 * 1024 * 1024) { toast('图片过大（上限20MB）', 'error'); return; }
+
+  // 本地预览
+  const reader = new FileReader();
+  reader.onload = e => {
+    document.getElementById('chat-image-thumb').src = e.target.result;
+    document.getElementById('chat-image-desc').textContent = '识别中…';
+    document.getElementById('chat-image-preview').style.display = 'flex';
+  };
+  reader.readAsDataURL(file);
+
+  // 上传识别
+  const formData = new FormData();
+  formData.append('image', file);
+  if (currentAvatar?.id) formData.append('avatar_id', currentAvatar.id);
+  try {
+    const resp = await fetch(API + '/api/media/vision', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + token },
+      body: formData,
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || '识别失败');
+    _pendingImageDesc = data.description;
+    _pendingImageThumbId = data.thumb_id || null;
+    document.getElementById('chat-image-desc').textContent = data.description;
+  } catch (e) {
+    toast('图片识别失败：' + e.message, 'error');
+    _pendingImageDesc = null;
+    document.getElementById('chat-image-desc').textContent = '识别失败，图片将作为附件发送';
+  }
+  // reset input
+  input.value = '';
+}
+
+function removeChatImage() {
+  _pendingImageDesc = null;
+  _pendingImageThumbId = null;
+  document.getElementById('chat-image-preview').style.display = 'none';
+  document.getElementById('chat-image-thumb').src = '';
+  document.getElementById('chat-image-desc').textContent = '';
+}
+
+// ─── TTS 播放 ────────────────────────────────────────────────
+let _avatarHasVoice = false;
+
+async function checkAvatarVoice() {
+  if (!currentAvatar?.id) return;
+  try {
+    const res = await api('GET', '/api/media/voice-status/' + currentAvatar.id);
+    _avatarHasVoice = (res?.clone_status?.status === 'success') && !!res?.clone_status?.voice_id;
+  } catch (e) {
+    _avatarHasVoice = false;
+  }
+}
+
+async function _loadTTS(idx, text) {
+  if (!currentAvatar?.id) return;
+  try {
+    const resp = await fetch(API + '/api/media/tts/' + currentAvatar.id, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+      body: JSON.stringify({ text }),
+    });
+    if (!resp.ok) return;
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const audio = document.getElementById('audio-' + idx);
+    const wrap = document.getElementById('audio-wrap-' + idx);
+    const toggle = document.querySelector(`[onclick*="toggleMsgVoice(${idx}"]`);
+    if (audio && wrap) {
+      audio.src = url;
+      audio.load();
+      wrap.style.display = 'block';
+      audio.play().catch(() => {}); // 自动播放（用户已交互过）
+      if (toggle) toggle.textContent = '💬 点击显示文字';
+      // 隐藏文字（默认语音模式）
+      const bubble = document.getElementById('bubble-' + idx);
+      if (bubble) bubble.style.display = 'none';
+    }
+  } catch (e) {
+    // TTS 失败静默处理，保持文字显示
+  }
+}
+
+function toggleMsgVoice(idx, text) {
+  const mode = _msgVoiceMode[idx] || 'text';
+  const bubble = document.getElementById('bubble-' + idx);
+  const wrap = document.getElementById('audio-wrap-' + idx);
+  const toggle = document.querySelector(`[onclick*="toggleMsgVoice(${idx}"]`);
+  const audio = document.getElementById('audio-' + idx);
+
+  if (mode === 'voice') {
+    // 切换到文字
+    _msgVoiceMode[idx] = 'text';
+    if (bubble) bubble.style.display = '';
+    if (wrap) wrap.style.display = 'none';
+    if (audio) audio.pause();
+    if (toggle) toggle.textContent = '🔊 点击播放语音';
+  } else {
+    // 切换到语音
+    _msgVoiceMode[idx] = 'voice';
+    if (bubble) bubble.style.display = 'none';
+    if (wrap && audio?.src) {
+      wrap.style.display = 'block';
+      audio.play().catch(() => {});
+    } else {
+      _loadTTS(idx, text);
+    }
+    if (toggle) toggle.textContent = '💬 点击显示文字';
+  }
+}
+
+// ─── 声音克隆管理 ───────────────────────────────────────────
+async function loadVoiceStatus() {
+  if (!currentAvatar?.id) return;
+  try {
+    const res = await api('GET', '/api/media/voice-status/' + currentAvatar.id);
+    const statusEl = document.getElementById('voice-clone-status-text');
+    const listEl = document.getElementById('voice-sample-list');
+    if (!statusEl) return;
+
+    const st = res.clone_status?.status || 'not_started';
+    const statusMap = {
+      not_started: '尚未开始 — 请上传声音样本',
+      training: '训练中，通常需要5~30分钟，请稍后刷新',
+      success: '✅ 克隆成功！替身将用 TA 的声音说话',
+      failed: '❌ 训练失败，请删除旧样本重新上传',
+      unknown: '状态未知，请稍后重试',
+    };
+    statusEl.innerHTML = `<span style="font-weight:500">${statusMap[st] || st}</span>`;
+    if (st === 'success') {
+      statusEl.style.color = 'var(--success, #059669)';
+      _avatarHasVoice = true;
+    }
+
+    // 设置语言 select
+    const langSel = document.getElementById('voice-lang-select');
+    if (langSel && res.voice_language) langSel.value = res.voice_language;
+
+    // 渲染样本列表
+    if (listEl) {
+      listEl.innerHTML = '';
+      (res.samples || []).forEach(s => {
+        const item = document.createElement('div');
+        item.className = 'voice-sample-item';
+        item.innerHTML = `
+          <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(s.filename)}</span>
+          <span class="vs-${s.status}">${{'pending':'待处理','uploading':'上传中','uploaded':'已上传','training':'训练中','ready':'已就绪','failed':'失败'}[s.status]||s.status}</span>
+          <button class="btn btn-secondary btn-sm" style="font-size:11px;padding:2px 8px" onclick="deleteVoiceSample('${s.id}')">删除</button>`;
+        listEl.appendChild(item);
+      });
+      if (!res.samples?.length) {
+        listEl.innerHTML = '<div style="font-size:13px;color:var(--text-3);margin-top:8px">暂无声音样本</div>';
+      }
+    }
+  } catch (e) {
+    const statusEl = document.getElementById('voice-clone-status-text');
+    if (statusEl) statusEl.textContent = '加载失败，请重试';
+  }
+}
+
+async function uploadVoiceSample(input) {
+  const file = input.files[0];
+  if (!file || !currentAvatar?.id) return;
+  input.value = '';
+
+  const lang = document.getElementById('voice-lang-select')?.value || 'zh';
+  const formData = new FormData();
+  formData.append('audio', file);
+  formData.append('language', lang);
+
+  toast('上传声音样本中…', 'info');
+  try {
+    const resp = await fetch(API + '/api/media/voice-sample/' + currentAvatar.id, {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + token },
+      body: formData,
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || '上传失败');
+    toast(data.message || '上传成功，训练已提交', 'success');
+    loadVoiceStatus();
+  } catch (e) {
+    toast('上传失败：' + e.message, 'error');
+  }
+}
+
+async function deleteVoiceSample(sampleId) {
+  if (!currentAvatar?.id) return;
+  if (!confirm('确认删除这个声音样本？')) return;
+  try {
+    const resp = await fetch(API + '/api/media/voice-sample/' + currentAvatar.id + '/' + sampleId, {
+      method: 'DELETE',
+      headers: { Authorization: 'Bearer ' + token },
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || '删除失败');
+    toast('已删除', 'success');
+    loadVoiceStatus();
+  } catch (e) {
+    toast('删除失败：' + e.message, 'error');
+  }
+}
+
+async function previewTTS() {
+  const text = document.getElementById('tts-preview-text')?.value?.trim();
+  if (!text) { toast('请输入试听文字', 'error'); return; }
+  if (!currentAvatar?.id) return;
+
+  const playerEl = document.getElementById('tts-preview-player');
+  if (playerEl) playerEl.innerHTML = '<span style="font-size:13px;color:var(--text-3)">合成中…</span>';
+
+  try {
+    const resp = await fetch(API + '/api/media/tts/' + currentAvatar.id, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+      body: JSON.stringify({ text }),
+    });
+    if (!resp.ok) {
+      const err = await resp.json();
+      throw new Error(err.error || '合成失败');
+    }
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    if (playerEl) {
+      playerEl.innerHTML = '';
+      const audio = document.createElement('audio');
+      audio.src = url;
+      audio.controls = true;
+      audio.autoplay = true;
+      playerEl.appendChild(audio);
+    }
+  } catch (e) {
+    toast('TTS 失败：' + e.message, 'error');
+    if (playerEl) playerEl.innerHTML = '';
+  }
+}
+
+
 </script>
 </body>
 </html>

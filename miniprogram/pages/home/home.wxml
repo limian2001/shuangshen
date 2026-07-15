@@ -1,6 +1,74 @@
-<!-- 首页：全屏 web-view -->
+<!-- 首页：已登录显示 webview，未登录显示原生落地页 -->
+
+<!-- 已登录：全屏 web-view -->
 <web-view
-  wx:if="{{webviewUrl}}"
+  wx:if="{{isLoggedIn && webviewUrl}}"
   src="{{webviewUrl}}"
   bindmessage="onWebViewMessage"
 />
+
+<!-- 未登录：原生落地页（微信要求先浏览再登录） -->
+<scroll-view wx:else scroll-y class="landing">
+
+  <!-- Hero 区域 -->
+  <view class="hero">
+    <view class="hero-logo">言己</view>
+    <view class="hero-title">用 AI 重现你珍视的人</view>
+    <view class="hero-sub">音色 · 记忆 · 说话方式，一一还原</view>
+  </view>
+
+  <!-- 示例对话：让用户感受产品 -->
+  <view class="demo-section">
+    <view class="demo-label">✦ 就像这样对话</view>
+    <view class="demo-chat">
+      <view class="bubble-wrap right">
+        <view class="bubble bubble-user">妈，我今天工作不顺利，好累……</view>
+      </view>
+      <view class="bubble-wrap left">
+        <view class="avatar-dot">妈</view>
+        <view class="bubble bubble-ai">宝贝，累了就好好休息。你从小就比别人努力，妈心里都看见的。</view>
+      </view>
+      <view class="bubble-wrap right">
+        <view class="bubble bubble-user">要是你还在就好了……</view>
+      </view>
+      <view class="bubble-wrap left">
+        <view class="avatar-dot">妈</view>
+        <view class="bubble bubble-ai">妈一直都在。只要你想我，就来这里说说话。</view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 功能亮点 -->
+  <view class="features">
+    <view class="feature-card">
+      <text class="feature-icon">🎙️</text>
+      <view>
+        <view class="feature-title">声音复刻</view>
+        <view class="feature-desc">上传音频，AI 还原ta独有的音色</view>
+      </view>
+    </view>
+    <view class="feature-card">
+      <text class="feature-icon">💬</text>
+      <view>
+        <view class="feature-title">性格记忆</view>
+        <view class="feature-desc">导入聊天记录，学习ta的说话方式</view>
+      </view>
+    </view>
+    <view class="feature-card">
+      <text class="feature-icon">📸</text>
+      <view>
+        <view class="feature-title">照片故事</view>
+        <view class="feature-desc">用照片和文字丰富 AI 的长期记忆</view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 登录按钮 -->
+  <view class="cta-section">
+    <button class="cta-btn" bindtap="goLogin">免费创建 AI 替身</button>
+    <view class="cta-hint">一分钟上手 · 随时随地对话</view>
+  </view>
+
+  <view class="landing-footer">言己 — 让思念有处安放</view>
+
+</scroll-view>

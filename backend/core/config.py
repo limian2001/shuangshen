@@ -68,6 +68,23 @@ class Config:
     UPLOAD_FOLDER: Path = BASE_DIR / os.getenv("UPLOAD_FOLDER", "data/uploads")
     MAX_CONTENT_LENGTH: int = int(os.getenv("MAX_CONTENT_LENGTH_MB", 50)) * 1024 * 1024
 
+    # ── 媒体服务 ──────────────────────────────────────────────────
+    # 腾讯云 ASR（语音识别）
+    TENCENT_ASR_SECRET_ID: str  = os.getenv("TENCENT_ASR_SECRET_ID", "")
+    TENCENT_ASR_SECRET_KEY: str = os.getenv("TENCENT_ASR_SECRET_KEY", "")
+    TENCENT_ASR_REGION: str     = os.getenv("TENCENT_ASR_REGION", "ap-guangzhou")
+
+    # 火山引擎 TTS + 声音复刻（新版控制台，X-Api-* 认证）
+    VOLC_APP_ID: str        = os.getenv("VOLC_APP_ID", "")
+    VOLC_API_KEY: str       = os.getenv("VOLC_API_KEY", "")   # 新版 API Key（替代 ACCESS_TOKEN）
+    # 以下为旧版兼容，新版不再使用
+    VOLC_ACCESS_TOKEN: str  = os.getenv("VOLC_ACCESS_TOKEN", "")
+    VOLC_CLUSTER: str       = os.getenv("VOLC_CLUSTER", "volcano_tts")
+
+    # 图片缓存（仅缩略图，超上限时按relevance_score淘汰）
+    IMAGE_THUMB_MAX_WIDTH: int = int(os.getenv("IMAGE_THUMB_MAX_WIDTH", 300))
+    IMAGE_MAX_PER_AVATAR: int  = int(os.getenv("IMAGE_MAX_PER_AVATAR", 200))
+
 
 config = Config()
 
