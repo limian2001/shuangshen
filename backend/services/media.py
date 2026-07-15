@@ -276,7 +276,6 @@ async def _tts_ws_async(text: str, speaker: str, speed_ratio: float,
 
     headers = {
         "X-Api-App-Id":      app_id,
-        "X-Api-App-Key":     app_id,
         "X-Api-Access-Key":  api_key,
         "X-Api-Resource-Id": "seed-tts-2.0",
         "X-Api-Request-Id":  req_id,
