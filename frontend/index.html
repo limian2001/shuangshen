@@ -1489,6 +1489,8 @@ function backToAvatars() {
 
 function showAvatarPage(sub) {
   if (!currentAvatar) return;
+  // 接收者只能访问对话页，任何其他 sub 均忽略（安全守卫）
+  if (currentAvatar._isReceived && sub !== 'chat') return;
   closeSidebar();
 
   // 手机端：显示返回按钮，隐藏汉堡，显示子导航
@@ -1496,9 +1498,10 @@ function showAvatarPage(sub) {
   document.getElementById('topbar-back-btn').style.display = '';
   document.getElementById('mobile-page-title').textContent = currentAvatar.name || '替身';
   document.getElementById('mobile-subnav').classList.add('active');
-  // 更新子导航激活状态
+  // 更新子导航激活状态（仅更新可见项）
   ['chat','memories','ingest','identity','voice','share'].forEach(s => {
-    document.getElementById('msnav-' + s)?.classList.toggle('active', s === sub);
+    const el = document.getElementById('msnav-' + s);
+    if (el && el.style.display !== 'none') el.classList.toggle('active', s === sub);
   });
 
   const subs = ['chat','memories','ingest','identity','voice','share'];
@@ -3227,6 +3230,11 @@ let _avatarHasVoice = false;
 
 async function checkAvatarVoice() {
   if (!currentAvatar?.id) return;
+  // 接收者：直接从替身数据判断（不调用创建者专属接口，否则会触发 403 toast）
+  if (currentAvatar._isReceived) {
+    _avatarHasVoice = !!currentAvatar.voice_model_id;
+    return;
+  }
   try {
     const res = await api('GET', '/api/media/voice-status/' + currentAvatar.id);
     _avatarHasVoice = (res?.clone_status?.status === 'success') && !!res?.clone_status?.voice_id;
