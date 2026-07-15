@@ -178,9 +178,6 @@ select { cursor: pointer; }
 #voice-recording-overlay.show { display: block; }
 #voice-recording-overlay .overlay-icon { font-size: 36px; display: block; margin-bottom: 6px; }
 #voice-recording-overlay .overlay-hint { font-size: 12px; color: rgba(255,255,255,.7); margin-top: 4px; }
-.chat-image-preview { display: flex; align-items: center; gap: 8px; padding: 6px 0 2px; }
-.chat-image-preview img { width: 56px; height: 56px; object-fit: cover; border-radius: 8px; border: 1px solid var(--border-md); }
-.chat-image-preview .remove-img { font-size: 12px; color: var(--text-3); cursor: pointer; padding: 2px 6px; }
 .msg-audio { margin-top: 5px; }
 .msg-audio audio { width: 100%; max-width: 220px; height: 32px; border-radius: 16px; }
 .msg-voice-toggle { font-size: 11px; color: var(--purple); cursor: pointer; margin-top: 2px; display: inline-block; opacity: .8; }
@@ -683,20 +680,9 @@ body.is-mobile .row .field   { width: 100%; }
         ">🤖 以下内容由人工智能生成，仅供参考</div>
         <div id="chat-messages"></div>
         <div id="chat-input-wrap">
-          <!-- 图片预览 -->
-          <div id="chat-image-preview" class="chat-image-preview" style="display:none">
-            <img id="chat-image-thumb" src="" alt="图片">
-            <div>
-              <div id="chat-image-desc" style="font-size:12px;color:var(--text-3);max-width:160px;line-height:1.4"></div>
-              <span class="remove-img" onclick="removeChatImage()">✕ 移除</span>
-            </div>
-          </div>
           <div id="chat-input-row">
             <!-- 麦克风切换按钮 -->
             <button class="media-btn" id="voice-mode-btn" title="切换语音输入" onclick="toggleVoiceInputMode()">🎤</button>
-            <!-- 图片按钮 -->
-            <button class="media-btn" title="发送图片" onclick="document.getElementById('chat-img-input').click()">🖼️</button>
-            <input type="file" id="chat-img-input" accept="image/*" style="display:none" onchange="handleChatImage(this)">
             <textarea id="chat-input" placeholder="输入消息，Enter 发送，Shift+Enter 换行" rows="1"></textarea>
             <!-- 按住说话按钮（语音模式时显示） -->
             <button id="hold-to-speak-btn">🎙️ 按住说话</button>
@@ -1558,8 +1544,20 @@ function setCurrentAvatar(avatar) {
   document.getElementById('chat-avatar-icon').textContent = avatar.name?.[0] || '?';
   document.getElementById('share-code-display').textContent = avatar.share_code || '加载中...';
 
-  // 权限：接收者只保留对话，隐藏5个管理Tab，显示解绑（CSS class 控制）
-  document.body.classList.toggle('receiver-mode', !!avatar._isReceived);
+  // 权限：接收者只保留对话，隐藏5个管理Tab，显示解绑
+  // 用 setProperty('display', ..., 'important') 保证任何 CSS/WebView 环境都生效
+  const isReceived = !!avatar._isReceived;
+  document.body.classList.toggle('receiver-mode', isReceived);
+  const creatorIds = ['snav-memories','snav-ingest','snav-identity','snav-voice','snav-share',
+                      'msnav-memories','msnav-ingest','msnav-identity','msnav-voice','msnav-share'];
+  creatorIds.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.setProperty('display', isReceived ? 'none' : '', 'important');
+  });
+  const ubD = document.getElementById('snav-unbind');
+  if (ubD) ubD.style.setProperty('display', isReceived ? 'flex' : 'none', 'important');
+  const ubM = document.getElementById('msnav-unbind');
+  if (ubM) ubM.style.setProperty('display', isReceived ? 'block' : 'none', 'important');
 }
 
 // 管理替身（人设/记忆/喂数据/共享），默认进喂数据页
@@ -1841,14 +1839,7 @@ async function loadChatHistory() {
 
 async function sendMessage() {
   const input = document.getElementById('chat-input');
-  let text = input.value.trim();
-
-  // 注入图片描述（若有待发图片）
-  if (_pendingImageDesc) {
-    text = (text ? text + '\n' : '') + '[图片：' + _pendingImageDesc + ']';
-    removeChatImage();
-  }
-
+  const text = input.value.trim();
   if (!text || !currentAvatar) return;
   const avatarId = currentAvatar.id;
   input.value = '';
@@ -3156,21 +3147,39 @@ function _initHoldToSpeak() {
 }
 
 // 开始录音
+let _sttPendingStop = false;  // 记录用户在 getUserMedia 完成前已经松手
 async function _sttBeginRecord() {
   if (_sttIsRecording) return;
   if (!navigator.mediaDevices?.getUserMedia) {
     toast('当前环境不支持录音', 'error'); return;
   }
+  _sttPendingStop = false;
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+    // 若 getUserMedia 未返回前用户已松手，直接丢弃
+    if (_sttPendingStop) { stream.getTracks().forEach(t => t.stop()); return; }
+
     _sttAudioChunks = [];
     _sttCancelled = false;
-    _sttMediaRecorder = new MediaRecorder(stream, { mimeType: _sttGetMime() });
+
+    // 优先选带 codecs 的格式，保证兼容性
+    const mime = _sttGetMime();
+    const recOpts = MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(mime)
+      ? { mimeType: mime } : {};
+    _sttMediaRecorder = new MediaRecorder(stream, recOpts);
+
     _sttMediaRecorder.ondataavailable = e => { if (e.data.size > 0) _sttAudioChunks.push(e.data); };
-    _sttMediaRecorder.onstop = () => { if (!_sttCancelled) _sttHandleStop(); };
-    _sttMediaRecorder.start();
+    _sttMediaRecorder.onstop = () => {
+      // 停完再释放轨道，防止 dataavailable 丢包
+      stream.getTracks().forEach(t => t.stop());
+      if (!_sttCancelled) _sttHandleStop();
+    };
+
+    // timeslice=200ms：每 200ms 触发一次 dataavailable，防止短录音丢数据
+    _sttMediaRecorder.start(200);
     _sttIsRecording = true;
-    // UI
+
     const holdBtn = document.getElementById('hold-to-speak-btn');
     if (holdBtn) { holdBtn.classList.add('pressing'); holdBtn.textContent = '🔴 松开发送'; }
     _sttShowOverlay(false);
@@ -3223,9 +3232,12 @@ function _sttCancelRecord() {
 function _sttStopMedia(cancel) {
   _sttCancelled = cancel;
   if (_sttMediaRecorder && _sttIsRecording) {
-    _sttMediaRecorder.stop();
-    _sttMediaRecorder.stream?.getTracks().forEach(t => t.stop());
+    try { _sttMediaRecorder.stop(); } catch(e) {}
+    // track 停止在 onstop 里做，防止丢数据
     _sttIsRecording = false;
+  } else {
+    // getUserMedia 还没完成就松手
+    _sttPendingStop = true;
   }
   _sttHideOverlay();
   const holdBtn = document.getElementById('hold-to-speak-btn');
@@ -3287,55 +3299,6 @@ function _sttGetMime() {
 // 兼容旧代码引用
 function _getSupportedMime() { return _sttGetMime(); }
 
-// ─── 图片上传 (Vision) ───────────────────────────────────────
-let _pendingImageDesc = null;
-let _pendingImageThumbId = null;
-
-async function handleChatImage(input) {
-  const file = input.files[0];
-  if (!file) return;
-  if (file.size > 20 * 1024 * 1024) { toast('图片过大（上限20MB）', 'error'); return; }
-
-  // 本地预览
-  const reader = new FileReader();
-  reader.onload = e => {
-    document.getElementById('chat-image-thumb').src = e.target.result;
-    document.getElementById('chat-image-desc').textContent = '识别中…';
-    document.getElementById('chat-image-preview').style.display = 'flex';
-  };
-  reader.readAsDataURL(file);
-
-  // 上传识别
-  const formData = new FormData();
-  formData.append('image', file);
-  if (currentAvatar?.id) formData.append('avatar_id', currentAvatar.id);
-  try {
-    const resp = await fetch(API + '/api/media/vision', {
-      method: 'POST',
-      headers: { Authorization: 'Bearer ' + token },
-      body: formData,
-    });
-    const data = await resp.json();
-    if (!resp.ok) throw new Error(data.error || '识别失败');
-    _pendingImageDesc = data.description;
-    _pendingImageThumbId = data.thumb_id || null;
-    document.getElementById('chat-image-desc').textContent = data.description;
-  } catch (e) {
-    toast('图片识别失败：' + e.message, 'error');
-    _pendingImageDesc = null;
-    document.getElementById('chat-image-desc').textContent = '识别失败，图片将作为附件发送';
-  }
-  // reset input
-  input.value = '';
-}
-
-function removeChatImage() {
-  _pendingImageDesc = null;
-  _pendingImageThumbId = null;
-  document.getElementById('chat-image-preview').style.display = 'none';
-  document.getElementById('chat-image-thumb').src = '';
-  document.getElementById('chat-image-desc').textContent = '';
-}
 
 // ─── TTS 播放 ────────────────────────────────────────────────
 let _avatarHasVoice = false;

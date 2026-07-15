@@ -124,29 +124,6 @@ def _tc3_request(
 
 
 # ──────────────────────────────────────────────────────────────────────
-# Vision — 图像理解（通过配置的 LLM Provider 路由）
-# ──────────────────────────────────────────────────────────────────────
-
-VISION_PROMPT = (
-    "请用中文简洁描述这张图片的内容，包括：场景/地点、主要人物或物体、情绪氛围、"
-    "关键细节。目的是为 AI 对话提供上下文，不超过100字。"
-)
-
-
-def vision_describe(image_bytes: bytes, media_type: str = "image/jpeg") -> str:
-    """
-    调用当前配置的 LLM Provider 描述图片（deepseek / anthropic / openai 均支持）。
-    返回中文描述；失败抛 RuntimeError。
-    """
-    from backend.services.llm_provider import llm
-    try:
-        return llm.describe_image(image_bytes, media_type, VISION_PROMPT)
-    except urllib.error.HTTPError as e:
-        body = e.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"Vision API 错误 {e.code}: {body}") from e
-
-
-# ──────────────────────────────────────────────────────────────────────
 # TTS — 火山引擎 seed-tts-2.0（WebSocket 双向流 + X-Api-* 认证）
 # 声音复刻 — mega_tts V3（HTTP + X-Api-* 认证）
 # ──────────────────────────────────────────────────────────────────────
@@ -490,43 +467,6 @@ def voice_clone_status(speaker_id: str) -> dict:
         return {"status": "failed", "voice_id": ""}
 
 
-# ──────────────────────────────────────────────────────────────────────
-# 图片缩略图
-# ──────────────────────────────────────────────────────────────────────
-
-def make_thumbnail(image_bytes: bytes, max_width: int = None) -> bytes:
-    """
-    生成 JPEG 缩略图。需要 Pillow；失败时原样返回。
-    """
-    max_w = max_width or config.IMAGE_THUMB_MAX_WIDTH
-    try:
-        from PIL import Image
-        import io
-        img = Image.open(io.BytesIO(image_bytes))
-        img = img.convert("RGB")
-        w, h = img.size
-        if w > max_w:
-            ratio = max_w / w
-            img = img.resize((max_w, int(h * ratio)), Image.LANCZOS)
-        buf = io.BytesIO()
-        img.save(buf, format="JPEG", quality=75, optimize=True)
-        return buf.getvalue()
-    except Exception as e:
-        print(f"[MEDIA] thumbnail 生成失败，原样返回: {e}")
-        return image_bytes
-
-
-def detect_media_type(image_bytes: bytes) -> str:
-    """猜测图片 MIME type（通过文件头）"""
-    if image_bytes[:8] == b"\x89PNG\r\n\x1a\n":
-        return "image/png"
-    if image_bytes[:3] == b"\xff\xd8\xff":
-        return "image/jpeg"
-    if image_bytes[:4] == b"GIF8":
-        return "image/gif"
-    if image_bytes[:4] == b"RIFF" and image_bytes[8:12] == b"WEBP":
-        return "image/webp"
-    return "image/jpeg"
 
 
 # ──────────────────────────────────────────────────────────────────────

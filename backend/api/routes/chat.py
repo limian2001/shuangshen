@@ -1,12 +1,11 @@
 from __future__ import annotations
 """
-对话路由 v0.5 — 图片上下文注入 + 可选 TTS 同步返回
+对话路由 — 可选 TTS 同步返回
 
 Body JSON:
   {
-    "message":           "你好",        # 用户文字（可为空，当仅发图时）
-    "image_description": "一张合影...", # 可选，来自 /api/media/vision 返回值
-    "voice":             false           # true 时同步合成并返回 audio_base64
+    "message": "你好",
+    "voice":   false   # true 时同步合成并返回 audio_base64
   }
 
 Returns:
@@ -43,12 +42,11 @@ def send_message(avatar_id):
     if not _receiver_can_chat(avatar_id, g.user_id):
         return jsonify({"error": "你还没有绑定这个替身，请先获取共享码并绑定"}), 403
 
-    data              = request.get_json() or {}
-    message           = (data.get("message") or "").strip()
-    image_description = (data.get("image_description") or "").strip()
-    want_voice        = bool(data.get("voice", False))
+    data       = request.get_json() or {}
+    message    = (data.get("message") or "").strip()
+    want_voice = bool(data.get("voice", False))
 
-    if not message and not image_description:
+    if not message:
         return jsonify({"error": "消息不能为空"}), 400
 
     # ── 检查人工接管 ──────────────────────────────────────────────────────────
@@ -58,7 +56,7 @@ def send_message(avatar_id):
             (avatar_id, g.user_id),
         ).fetchone()
     if active_takeover:
-        _save_message(avatar_id, g.user_id, "user", message or f"[图片] {image_description[:50]}")
+        _save_message(avatar_id, g.user_id, "user", message)
         with get_db() as _tc:
             _tc.execute(
                 "UPDATE takeover_sessions SET last_receiver_msg_at=datetime('now') WHERE id=?",
@@ -74,8 +72,8 @@ def send_message(avatar_id):
     if topic_hints:
         print(f"[TOPIC_HINT] avatar={avatar_id[:8]} hint_len={len(topic_hints)}")
 
-    # ③ 构建对话上下文（RAG 检索用原始 message，图片描述不污染向量）
-    rag_query = message or image_description
+    # ③ 构建对话上下文
+    rag_query = message
     try:
         system_prompt, retrieved_memories = get_chat_context(
             avatar_id=avatar_id,
@@ -86,18 +84,11 @@ def send_message(avatar_id):
     except ValueError as e:
         return jsonify({"error": str(e)}), 404
 
-    # ④ 构建 LLM 消息（图片描述注入当轮 user content）
-    if image_description:
-        llm_content = f"[我发了一张图片，内容：{image_description}]"
-        if message:
-            llm_content += f"\n{message}"
-    else:
-        llm_content = message
-
-    messages = history + [{"role": "user", "content": llm_content}]
+    # ④ 构建 LLM 消息
+    messages = history + [{"role": "user", "content": message}]
     print(
         f"[LLM] avatar={avatar_id[:8]} history={len(history)} "
-        f"memories={len(retrieved_memories)} voice={want_voice} img={'Y' if image_description else 'N'}"
+        f"memories={len(retrieved_memories)} voice={want_voice}"
     )
 
     # ④ 调用 LLM
@@ -113,9 +104,8 @@ def send_message(avatar_id):
     except Exception as e:
         return jsonify({"error": f"LLM 调用失败: {str(e)}"}), 500
 
-    # ⑤ 存储对话历史（存原始 message，图片仅保留前缀标记）
-    history_text = message if message else f"[图片] {image_description[:50]}"
-    _save_message(avatar_id, g.user_id, "user", history_text)
+    # ⑤ 存储对话历史
+    _save_message(avatar_id, g.user_id, "user", message)
     _save_message(avatar_id, g.user_id, "assistant", reply)
 
     # ⑥ 构建响应

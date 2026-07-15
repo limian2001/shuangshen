@@ -1,15 +1,12 @@
 from __future__ import annotations
 """
-媒体路由 — STT / Vision / TTS / 声音克隆
+媒体路由 — STT / TTS / 声音克隆
 
 POST /api/media/stt              录音 → 文字 (multipart audio file)
-POST /api/media/vision           图片 → 描述文字 (multipart image)
 POST /api/media/tts/<avatar_id>  文字 → MP3 音频 (JSON body)
 POST /api/media/voice-sample/<avatar_id>  上传声音样本 (multipart)
 GET  /api/media/voice-status/<avatar_id>  查询克隆状态
 """
-import os
-import uuid
 from pathlib import Path
 
 from flask import Blueprint, request, jsonify, g, Response
@@ -19,21 +16,16 @@ from backend.db.database import get_db, row_to_dict, rows_to_list
 from backend.core.config import config
 from backend.services.media import (
     stt_recognize,
-    vision_describe,
     tts_synthesize,
     voice_clone_upload,
     voice_clone_train,
     voice_clone_status,
-    make_thumbnail,
-    detect_media_type,
 )
 
 media_bp = Blueprint("media", __name__, url_prefix="/api/media")
 
 VOICE_SAMPLES_DIR = config.UPLOAD_FOLDER / "voice_samples"
-THUMB_DIR         = config.UPLOAD_FOLDER / "image_thumbs"
 VOICE_SAMPLES_DIR.mkdir(parents=True, exist_ok=True)
-THUMB_DIR.mkdir(parents=True, exist_ok=True)
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -71,83 +63,6 @@ def stt_endpoint():
         return jsonify({"error": str(e)}), 503
 
     return jsonify({"text": text, "language": language})
-
-
-# ─────────────────────────────────────────────────────────────────────
-# Vision
-# ─────────────────────────────────────────────────────────────────────
-
-@media_bp.post("/vision")
-@require_auth
-def vision_endpoint():
-    """
-    接收图片，返回 AI 描述（用于注入对话上下文）。
-
-    Form fields:
-      - image: 图片文件（JPEG / PNG / WEBP / GIF）
-      - avatar_id: (可选) 关联替身 ID，用于存储图片描述到 image_cache
-    """
-    img_file = request.files.get("image")
-    if not img_file:
-        return jsonify({"error": "缺少 image 文件"}), 400
-
-    img_bytes = img_file.read()
-    if not img_bytes:
-        return jsonify({"error": "图片为空"}), 400
-
-    if len(img_bytes) > 20 * 1024 * 1024:  # 20 MB
-        return jsonify({"error": "图片过大（上限 20MB）"}), 400
-
-    media_type = detect_media_type(img_bytes)
-    try:
-        description = vision_describe(img_bytes, media_type)
-    except RuntimeError as e:
-        return jsonify({"error": str(e)}), 503
-
-    avatar_id = request.form.get("avatar_id", "").strip()
-
-    # 存缩略图 + 描述到 image_cache
-    thumb_id = None
-    if avatar_id:
-        thumb_id = _save_image_cache(avatar_id, img_bytes, description)
-
-    return jsonify({
-        "description": description,
-        "thumb_id": thumb_id,
-    })
-
-
-def _save_image_cache(avatar_id: str, img_bytes: bytes, description: str) -> str:
-    """保存缩略图 + description 到 image_cache 表，超上限时淘汰低分图片。"""
-    thumb_bytes = make_thumbnail(img_bytes)
-    img_id = new_id()
-    thumb_path = THUMB_DIR / f"{img_id}.jpg"
-    thumb_path.write_bytes(thumb_bytes)
-
-    with get_db() as conn:
-        # 淘汰：若超 IMAGE_MAX_PER_AVATAR，删除最低 relevance_score 的记录
-        count = conn.execute(
-            "SELECT COUNT(*) FROM image_cache WHERE avatar_id = ?", (avatar_id,)
-        ).fetchone()[0]
-        if count >= config.IMAGE_MAX_PER_AVATAR:
-            old = conn.execute(
-                "SELECT id, thumb_path FROM image_cache WHERE avatar_id = ? "
-                "ORDER BY relevance_score ASC, last_accessed ASC LIMIT ?",
-                (avatar_id, max(1, count - config.IMAGE_MAX_PER_AVATAR + 1)),
-            ).fetchall()
-            for row in old:
-                try:
-                    Path(row["thumb_path"]).unlink(missing_ok=True)
-                except Exception:
-                    pass
-                conn.execute("DELETE FROM image_cache WHERE id = ?", (row["id"],))
-
-        conn.execute(
-            """INSERT INTO image_cache (id, avatar_id, thumb_path, description)
-               VALUES (?, ?, ?, ?)""",
-            (img_id, avatar_id, str(thumb_path), description),
-        )
-    return img_id
 
 
 # ─────────────────────────────────────────────────────────────────────
