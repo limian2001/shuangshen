@@ -283,6 +283,18 @@ def received_avatars():
     return jsonify(rows)
 
 
+@avatars_bp.delete("/received/<avatar_id>")
+@require_auth
+def leave_avatar(avatar_id):
+    """接收者解绑替身"""
+    with get_db() as conn:
+        conn.execute(
+            "DELETE FROM avatar_receivers WHERE avatar_id = ? AND receiver_id = ?",
+            (avatar_id, g.user_id),
+        )
+    return jsonify({"ok": True})
+
+
 def _can_access(avatar_id: str, user_id: str, avatar: dict) -> bool:
     """检查用户是否有权访问某替身（创建者 or 接收者）"""
     if avatar["creator_id"] == user_id:

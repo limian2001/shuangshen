@@ -503,6 +503,10 @@ body.is-mobile .row .field   { width: 100%; }
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
           共享
         </div>
+        <div class="avatar-nav-item" id="snav-unbind" onclick="doUnbindAvatar()" style="display:none;color:#dc2626">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.36 6.64A9 9 0 0 1 20.77 15"/><path d="M6.16 6.16a9 9 0 1 0 12.68 12.68"/><line x1="2" y1="2" x2="22" y2="22"/></svg>
+          解绑替身
+        </div>
       </div>
     </div>
     <div class="sidebar-bottom">
@@ -536,6 +540,7 @@ body.is-mobile .row .field   { width: 100%; }
       <div class="m-subnav-item"        id="msnav-identity" onclick="showAvatarPage('identity')">人设</div>
       <div class="m-subnav-item"        id="msnav-voice"    onclick="showAvatarPage('voice')">声音</div>
       <div class="m-subnav-item"        id="msnav-share"    onclick="showAvatarPage('share')">共享</div>
+      <div class="m-subnav-item"        id="msnav-unbind"   onclick="doUnbindAvatar()" style="display:none;color:#dc2626">解绑</div>
     </div>
 
     <!-- Page: avatars list -->
@@ -1523,6 +1528,20 @@ function setCurrentAvatar(avatar) {
   document.getElementById('chat-avatar-rel').textContent = relLabel(avatar.relationship);
   document.getElementById('chat-avatar-icon').textContent = avatar.name?.[0] || '?';
   document.getElementById('share-code-display').textContent = avatar.share_code || '加载中...';
+
+  // 权限：接收者只保留对话，隐藏5个管理Tab，显示解绑
+  const isReceived = !!avatar._isReceived;
+  const mgmtIds = ['memories','ingest','identity','voice','share'];
+  mgmtIds.forEach(k => {
+    const d = document.getElementById('snav-' + k);
+    if (d) d.style.display = isReceived ? 'none' : '';
+    const m = document.getElementById('msnav-' + k);
+    if (m) m.style.display = isReceived ? 'none' : '';
+  });
+  const ubD = document.getElementById('snav-unbind');
+  if (ubD) ubD.style.display = isReceived ? '' : 'none';
+  const ubM = document.getElementById('msnav-unbind');
+  if (ubM) ubM.style.display = isReceived ? '' : 'none';
 }
 
 // 管理替身（人设/记忆/喂数据/共享），默认进喂数据页
@@ -1690,17 +1709,49 @@ async function loadReceived() {
     el.innerHTML = '<div class="empty"><p>还没有绑定的替身</p></div>';
     return;
   }
-  el.innerHTML = list.map(a => `
-    <div class="card" style="cursor:pointer" onclick="selectAvatar(${JSON.stringify(a).replace(/"/g,'&quot;')})">
+  el.innerHTML = list.map(a => {
+    const av = { ...a, _isReceived: true };
+    const avJson = JSON.stringify(av).replace(/"/g, '&quot;');
+    return `
+    <div class="card" style="cursor:pointer" onclick="selectAvatar(${avJson})">
       <div style="display:flex;align-items:center;gap:12px">
         <div class="avatar-sm">${a.name?.[0]||'?'}</div>
         <div>
           <div style="font-weight:600;font-size:14px">${esc(a.name)}</div>
           <div style="font-size:12px;color:var(--text-3)">${relLabel(a.relationship)} · 绑定于 ${fmtDate(a.bound_at)}</div>
         </div>
-        <button class="btn btn-primary btn-sm" style="margin-left:auto" onclick="event.stopPropagation();selectAvatar(${JSON.stringify(a).replace(/"/g,'&quot;')});showAvatarPage('chat')">开始对话</button>
+        <div style="display:flex;gap:6px;margin-left:auto">
+          <button class="btn btn-primary btn-sm" onclick="event.stopPropagation();selectAvatar(${avJson});showAvatarPage('chat')">开始对话</button>
+          <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();doUnbindAvatarById('${a.id}','${esc(a.name)}')">解绑</button>
+        </div>
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
+}
+
+// 侧边栏"解绑替身"按钮（当前选中的替身）
+async function doUnbindAvatar() {
+  if (!currentAvatar?.id) return;
+  await doUnbindAvatarById(currentAvatar.id, currentAvatar.name);
+}
+
+// 从绑定列表直接解绑
+async function doUnbindAvatarById(avatarId, name) {
+  if (!confirm(`确认解绑替身「${name}」？\n解绑后可以重新用共享码绑定。`)) return;
+  try {
+    const res = await api('DELETE', '/api/avatars/received/' + avatarId);
+    if (res?.ok) {
+      toast('已解绑', 'success');
+      if (currentAvatar?.id === avatarId) {
+        currentAvatar = null;
+        document.getElementById('avatar-sidebar-section').style.display = 'none';
+        showPage('received');
+      }
+      loadReceived();
+    }
+  } catch (e) {
+    toast('解绑失败：' + e.message, 'error');
+  }
 }
 
 async function doJoin() {
@@ -1838,12 +1889,11 @@ function appendMsg(role, content, animate, intercepted) {
   if (animate) div.style.animation = 'none';
   box.appendChild(div);
 
-  // 绑定 toggle 事件
+  // 绑定 toggle 事件（按需加载：用户点击喇叭才合成语音）
   if (!isUser && _avatarHasVoice) {
     const toggleEl = div.querySelector('.msg-voice-toggle');
     if (toggleEl) toggleEl.addEventListener('click', () => toggleMsgVoice(idx, content));
-    _msgVoiceMode[idx] = 'voice';
-    _loadTTS(idx, content);
+    _msgVoiceMode[idx] = 'text';  // 默认文字模式，不自动调用TTS
   }
 
   scrollBottom();
@@ -3187,39 +3237,49 @@ async function checkAvatarVoice() {
 
 async function _loadTTS(idx, text) {
   if (!currentAvatar?.id) return;
+  const toggle = document.querySelector(`.msg-voice-toggle[data-idx="${idx}"]`);
+  if (toggle) toggle.textContent = '⏳ 合成中…';
   try {
     const resp = await fetch(API + '/api/media/tts/' + currentAvatar.id, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
       body: JSON.stringify({ text }),
     });
-    if (!resp.ok) return;
+    if (!resp.ok) {
+      if (toggle) toggle.textContent = '🔊 点击播放语音';
+      _msgVoiceMode[idx] = 'text';
+      return;
+    }
     const blob = await resp.blob();
     const url = URL.createObjectURL(blob);
     const audio = document.getElementById('audio-' + idx);
-    const wrap = document.getElementById('audio-wrap-' + idx);
-    const toggle = document.querySelector(`[onclick*="toggleMsgVoice(${idx}"]`);
+    const wrap  = document.getElementById('audio-wrap-' + idx);
+    const bubble = document.getElementById('bubble-' + idx);
     if (audio && wrap) {
       audio.src = url;
       audio.load();
       wrap.style.display = 'block';
-      audio.play().catch(() => {}); // 自动播放（用户已交互过）
-      if (toggle) toggle.textContent = '💬 点击显示文字';
-      // 隐藏文字（默认语音模式）
-      const bubble = document.getElementById('bubble-' + idx);
       if (bubble) bubble.style.display = 'none';
+      audio.play().catch(() => {});
+      if (toggle) toggle.textContent = '💬 点击显示文字';
     }
   } catch (e) {
-    // TTS 失败静默处理，保持文字显示
+    // 失败回退到文字模式
+    if (toggle) toggle.textContent = '🔊 点击播放语音';
+    _msgVoiceMode[idx] = 'text';
+    const bubble = document.getElementById('bubble-' + idx);
+    if (bubble) bubble.style.display = '';
+    const wrap = document.getElementById('audio-wrap-' + idx);
+    if (wrap) wrap.style.display = 'none';
   }
 }
 
 function toggleMsgVoice(idx, text) {
   const mode = _msgVoiceMode[idx] || 'text';
   const bubble = document.getElementById('bubble-' + idx);
-  const wrap = document.getElementById('audio-wrap-' + idx);
-  const toggle = document.querySelector(`[onclick*="toggleMsgVoice(${idx}"]`);
-  const audio = document.getElementById('audio-' + idx);
+  const wrap   = document.getElementById('audio-wrap-' + idx);
+  const toggle = document.querySelector(`.msg-voice-toggle[data-idx="${idx}"]`);
+  const audio  = document.getElementById('audio-' + idx);
 
   if (mode === 'voice') {
     // 切换到文字
