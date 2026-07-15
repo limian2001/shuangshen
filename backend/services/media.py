@@ -262,7 +262,7 @@ def _parse_ws_msg(data: bytes):
 
 
 async def _tts_ws_async(text: str, speaker: str, speed_ratio: float,
-                        app_id: str, api_key: str) -> bytes:
+                        api_key: str) -> bytes:
     """seed-tts-2.0 WebSocket 双向流 TTS，返回 MP3 字节"""
     try:
         import websockets
@@ -274,11 +274,10 @@ async def _tts_ws_async(text: str, speaker: str, speed_ratio: float,
     req_id     = _rand_id()
     session_id = _rand_id()
 
+    # 正确的认证头：X-Api-Key（不是 X-Api-Access-Key，也不需要 X-Api-App-Id）
     headers = {
-        "X-Api-App-Id":      app_id,
-        "X-Api-Access-Key":  api_key,
+        "X-Api-Key":         api_key,
         "X-Api-Resource-Id": "seed-tts-2.0",
-        "X-Api-Request-Id":  req_id,
         "X-Api-Connect-Id":  _rand_id(),
     }
 
@@ -347,6 +346,49 @@ async def _tts_ws_async(text: str, speaker: str, speed_ratio: float,
         await ws.close()
 
 
+VOLC_ICL_TTS_URL = "https://openspeech.bytedance.com/api/v1/tts"
+
+
+def _tts_icl_http(text: str, voice_id: str, api_key: str, speed_ratio: float) -> bytes:
+    """
+    声音复刻合成（ICL HTTP 接口）。
+    voice_id 是声音克隆训练后的 speaker_id，cluster 固定为 volcano_icl。
+    """
+    req_id  = _rand_id()
+    payload = json.dumps({
+        "app":  {"cluster": "volcano_icl"},
+        "user": {"uid": req_id[:16]},
+        "audio": {
+            "voice_type":  voice_id,
+            "encoding":    "mp3",
+            "speed_ratio": round(speed_ratio, 2),
+        },
+        "request": {
+            "reqid":     req_id,
+            "text":      text,
+            "operation": "query",
+        },
+    }, ensure_ascii=False).encode()
+
+    req = urllib.request.Request(
+        VOLC_ICL_TTS_URL,
+        data=payload,
+        headers={"x-api-key": api_key, "Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            data = json.loads(resp.read())
+        code = data.get("code", 0)
+        if code != 3000:
+            raise RuntimeError(f"ICL TTS 错误 code={code}: {data.get('message', '')}")
+        import base64 as _b64
+        return _b64.b64decode(data.get("data", ""))
+    except urllib.error.HTTPError as e:
+        body = e.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"ICL TTS HTTP 错误 {e.code}: {body}") from e
+
+
 def tts_synthesize(
     text: str,
     voice_id: Optional[str] = None,
@@ -355,21 +397,24 @@ def tts_synthesize(
     volume: float = 1.0,
 ) -> bytes:
     """
-    文字合成语音（seed-tts-2.0 WebSocket）。
-    voice_id: 克隆声音ID（avatars.voice_model_id），None 时用默认音色。
+    文字合成语音。
+    - voice_id 有值（克隆声音）→ ICL HTTP 接口（volcano_icl cluster）
+    - voice_id 为 None           → seed-tts-2.0 WebSocket 默认音色
     返回 MP3 字节；失败抛 RuntimeError。
     """
-    app_id  = config.VOLC_APP_ID
     api_key = config.VOLC_API_KEY
-    if not app_id or not api_key:
-        raise RuntimeError(
-            "火山引擎 TTS 未配置，请在 .env 中填入 VOLC_APP_ID / VOLC_API_KEY"
-        )
+    if not api_key:
+        raise RuntimeError("火山引擎 TTS 未配置，请在 .env 中填入 VOLC_API_KEY")
 
-    speaker = voice_id if voice_id else DEFAULT_VOICE_MAP.get(language, DEFAULT_VOICE_MAP["zh"])
-    text    = text[:500]   # 单次合成上限
+    text = text[:500]
 
-    return asyncio.run(_tts_ws_async(text, speaker, speed, app_id, api_key))
+    if voice_id:
+        # 使用声音复刻的 speaker_id 合成
+        return _tts_icl_http(text, voice_id, api_key, speed)
+
+    # 默认音色走 seed-tts-2.0 WebSocket
+    speaker = DEFAULT_VOICE_MAP.get(language, DEFAULT_VOICE_MAP["zh"])
+    return asyncio.run(_tts_ws_async(text, speaker, speed, api_key))
 
 
 # ──────────────────────────────────────────────────────────────────────

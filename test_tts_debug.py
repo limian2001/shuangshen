@@ -35,18 +35,13 @@ async def test(label, url, headers):
 
 async def main():
     v3_url  = "wss://openspeech.bytedance.com/api/v3/tts/bidirection"
-    v3_base = {
-        "X-Api-App-Id":     "7418695795",
-        "X-Api-Access-Key": "d3854168-bdc5-4a94-bdad-8d7a892bca32",
-        "X-Api-Request-Id": "dbg-req-001",
-        "X-Api-Connect-Id": "dbg-conn-001",
+    # 正确 auth：X-Api-Key（官方示例确认）
+    v3_headers = {
+        "X-Api-Key":         "d3854168-bdc5-4a94-bdad-8d7a892bca32",
+        "X-Api-Resource-Id": "seed-tts-2.0",
+        "X-Api-Connect-Id":  "dbg-conn-001",
     }
-
-    # 新版 v3，逐一测试 Resource-Id
-    for rid in ["seed-tts-2.0", "TTS-SeedTTS2.0", "volcano_tts", "speech.synthesize"]:
-        h = dict(v3_base)
-        h["X-Api-Resource-Id"] = rid
-        await test(f"v3 / Resource-Id={rid}", v3_url, h)
+    await test("v3 seed-tts-2.0 (X-Api-Key)", v3_url, v3_headers)
 
     # 老版 v1，BigTTS 凭证（Bearer auth）
     await test(
