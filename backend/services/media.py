@@ -443,7 +443,13 @@ def voice_clone_upload(avatar_id: str, sample_bytes: bytes, filename: str) -> st
         raise RuntimeError("火山引擎 TTS 未配置")
 
     boundary = "----FormBoundary" + _rand_id()[:16]
-    ctype    = "audio/mpeg" if filename.lower().endswith(".mp3") else "audio/wav"
+    _fn = filename.lower()
+    ctype = ("audio/mpeg" if _fn.endswith(".mp3")  else
+             "audio/mp4"  if _fn.endswith(".m4a")  else
+             "audio/aac"  if _fn.endswith(".aac")  else
+             "audio/webm" if _fn.endswith(".webm") else
+             "audio/ogg"  if _fn.endswith(".ogg")  else
+             "audio/wav")
 
     parts = [
         f"--{boundary}\r\nContent-Disposition: form-data; name=\"speaker_id\"\r\n\r\n{avatar_id[:64]}",
