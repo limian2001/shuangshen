@@ -163,8 +163,21 @@ select { cursor: pointer; }
 #chat-input:focus { border-color: var(--purple-mid); box-shadow: 0 0 0 3px rgba(83,74,183,.1); }
 .media-btn { width: 42px; height: 42px; border-radius: 10px; border: 1px solid var(--border-md); background: var(--surface); display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 18px; flex-shrink: 0; transition: background .15s; }
 .media-btn:hover { background: var(--purple-light); border-color: var(--purple-mid); }
+.media-btn.active { background: var(--purple-light); border-color: var(--purple); }
 .media-btn.recording { background: #fee2e2; border-color: #f87171; animation: pulse-record 1s infinite; }
 @keyframes pulse-record { 0%,100% { opacity: 1; } 50% { opacity: .6; } }
+/* 按住说话按钮 */
+#hold-to-speak-btn { display: none; flex: 1; height: 42px; border-radius: 10px; border: 1px solid var(--purple-mid); background: var(--purple-light); color: var(--purple); font-size: 14px; font-weight: 600; cursor: pointer; user-select: none; -webkit-user-select: none; touch-action: none; transition: background .15s, border-color .15s; }
+#hold-to-speak-btn.pressing { background: var(--purple); color: #fff; border-color: var(--purple); animation: pulse-record 0.8s infinite; }
+#hold-to-speak-btn.cancel-zone { background: #fee2e2; color: #dc2626; border-color: #f87171; }
+/* 语音输入模式时隐藏文字输入 */
+#chat-input-row.voice-input-mode #chat-input { display: none; }
+#chat-input-row.voice-input-mode #hold-to-speak-btn { display: flex; align-items: center; justify-content: center; gap: 6px; }
+/* 录音状态浮层提示 */
+#voice-recording-overlay { display: none; position: fixed; bottom: 120px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,.75); color: #fff; border-radius: 16px; padding: 14px 28px; font-size: 14px; text-align: center; z-index: 9999; pointer-events: none; }
+#voice-recording-overlay.show { display: block; }
+#voice-recording-overlay .overlay-icon { font-size: 36px; display: block; margin-bottom: 6px; }
+#voice-recording-overlay .overlay-hint { font-size: 12px; color: rgba(255,255,255,.7); margin-top: 4px; }
 .chat-image-preview { display: flex; align-items: center; gap: 8px; padding: 6px 0 2px; }
 .chat-image-preview img { width: 56px; height: 56px; object-fit: cover; border-radius: 8px; border: 1px solid var(--border-md); }
 .chat-image-preview .remove-img { font-size: 12px; color: var(--text-3); cursor: pointer; padding: 2px 6px; }
@@ -329,6 +342,11 @@ select { cursor: pointer; }
   border-bottom: 2px solid transparent; transition: all .15s;
 }
 .m-subnav-item.active { color: var(--purple); border-bottom-color: var(--purple); font-weight: 500; }
+/* 接收者模式：只显示「对话」和「解绑」，管理 Tab 全隐藏 */
+#snav-unbind, #msnav-unbind { display: none; }
+body.receiver-mode .creator-only { display: none !important; }
+body.receiver-mode #snav-unbind { display: flex !important; }
+body.receiver-mode #msnav-unbind { display: flex !important; }
 
 /* ── body.is-mobile（WeChat web-view JS 检测版）── */
 body.is-mobile #app {
@@ -483,27 +501,27 @@ body.is-mobile .row .field   { width: 100%; }
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
           对话
         </div>
-        <div class="avatar-nav-item" id="snav-memories" onclick="showAvatarPage('memories')">
+        <div class="avatar-nav-item creator-only" id="snav-memories" onclick="showAvatarPage('memories')">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
           记忆与观点
         </div>
-        <div class="avatar-nav-item" id="snav-ingest" onclick="showAvatarPage('ingest')">
+        <div class="avatar-nav-item creator-only" id="snav-ingest" onclick="showAvatarPage('ingest')">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0018 9h-1.26A8 8 0 103 16.3"/></svg>
           喂数据
         </div>
-        <div class="avatar-nav-item" id="snav-identity" onclick="showAvatarPage('identity')">
+        <div class="avatar-nav-item creator-only" id="snav-identity" onclick="showAvatarPage('identity')">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
           人设信息
         </div>
-        <div class="avatar-nav-item" id="snav-voice" onclick="showAvatarPage('voice')">
+        <div class="avatar-nav-item creator-only" id="snav-voice" onclick="showAvatarPage('voice')">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
           声音
         </div>
-        <div class="avatar-nav-item" id="snav-share" onclick="showAvatarPage('share')">
+        <div class="avatar-nav-item creator-only" id="snav-share" onclick="showAvatarPage('share')">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
           共享
         </div>
-        <div class="avatar-nav-item" id="snav-unbind" onclick="doUnbindAvatar()" style="display:none;color:#dc2626">
+        <div class="avatar-nav-item" id="snav-unbind" onclick="doUnbindAvatar()" style="color:#dc2626">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.36 6.64A9 9 0 0 1 20.77 15"/><path d="M6.16 6.16a9 9 0 1 0 12.68 12.68"/><line x1="2" y1="2" x2="22" y2="22"/></svg>
           解绑替身
         </div>
@@ -535,12 +553,12 @@ body.is-mobile .row .field   { width: 100%; }
     <!-- 替身子页面横向导航（手机端，选中替身后显示） -->
     <div id="mobile-subnav">
       <div class="m-subnav-item active" id="msnav-chat"     onclick="showAvatarPage('chat')">对话</div>
-      <div class="m-subnav-item"        id="msnav-memories" onclick="showAvatarPage('memories')">记忆</div>
-      <div class="m-subnav-item"        id="msnav-ingest"   onclick="showAvatarPage('ingest')">喂数据</div>
-      <div class="m-subnav-item"        id="msnav-identity" onclick="showAvatarPage('identity')">人设</div>
-      <div class="m-subnav-item"        id="msnav-voice"    onclick="showAvatarPage('voice')">声音</div>
-      <div class="m-subnav-item"        id="msnav-share"    onclick="showAvatarPage('share')">共享</div>
-      <div class="m-subnav-item"        id="msnav-unbind"   onclick="doUnbindAvatar()" style="display:none;color:#dc2626">解绑</div>
+      <div class="m-subnav-item creator-only" id="msnav-memories" onclick="showAvatarPage('memories')">记忆</div>
+      <div class="m-subnav-item creator-only" id="msnav-ingest"   onclick="showAvatarPage('ingest')">喂数据</div>
+      <div class="m-subnav-item creator-only" id="msnav-identity" onclick="showAvatarPage('identity')">人设</div>
+      <div class="m-subnav-item creator-only" id="msnav-voice"    onclick="showAvatarPage('voice')">声音</div>
+      <div class="m-subnav-item creator-only" id="msnav-share"    onclick="showAvatarPage('share')">共享</div>
+      <div class="m-subnav-item"        id="msnav-unbind"   onclick="doUnbindAvatar()" style="color:#dc2626">解绑</div>
     </div>
 
     <!-- Page: avatars list -->
@@ -674,19 +692,27 @@ body.is-mobile .row .field   { width: 100%; }
             </div>
           </div>
           <div id="chat-input-row">
-            <!-- 录音按钮 -->
-            <button class="media-btn" id="voice-btn" title="语音输入" onclick="toggleVoiceRecording()">🎤</button>
+            <!-- 麦克风切换按钮 -->
+            <button class="media-btn" id="voice-mode-btn" title="切换语音输入" onclick="toggleVoiceInputMode()">🎤</button>
             <!-- 图片按钮 -->
             <button class="media-btn" title="发送图片" onclick="document.getElementById('chat-img-input').click()">🖼️</button>
             <input type="file" id="chat-img-input" accept="image/*" style="display:none" onchange="handleChatImage(this)">
             <textarea id="chat-input" placeholder="输入消息，Enter 发送，Shift+Enter 换行" rows="1"></textarea>
+            <!-- 按住说话按钮（语音模式时显示） -->
+            <button id="hold-to-speak-btn">🎙️ 按住说话</button>
             <button class="btn btn-primary" id="send-btn" onclick="sendMessage()">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
             </button>
           </div>
-          <div class="chat-hint">Enter 发送 · Shift+Enter 换行</div>
+          <div class="chat-hint" id="chat-hint-text">Enter 发送 · Shift+Enter 换行</div>
         </div>
       </div>
+    </div>
+    <!-- 录音状态浮层 -->
+    <div id="voice-recording-overlay">
+      <span class="overlay-icon" id="overlay-icon">🎙️</span>
+      <div id="overlay-text">松开发送</div>
+      <div class="overlay-hint" id="overlay-hint">向左滑动取消</div>
     </div>
 
     <!-- Page: memories -->
@@ -1532,19 +1558,8 @@ function setCurrentAvatar(avatar) {
   document.getElementById('chat-avatar-icon').textContent = avatar.name?.[0] || '?';
   document.getElementById('share-code-display').textContent = avatar.share_code || '加载中...';
 
-  // 权限：接收者只保留对话，隐藏5个管理Tab，显示解绑
-  const isReceived = !!avatar._isReceived;
-  const mgmtIds = ['memories','ingest','identity','voice','share'];
-  mgmtIds.forEach(k => {
-    const d = document.getElementById('snav-' + k);
-    if (d) d.style.display = isReceived ? 'none' : '';
-    const m = document.getElementById('msnav-' + k);
-    if (m) m.style.display = isReceived ? 'none' : '';
-  });
-  const ubD = document.getElementById('snav-unbind');
-  if (ubD) ubD.style.display = isReceived ? '' : 'none';
-  const ubM = document.getElementById('msnav-unbind');
-  if (ubM) ubM.style.display = isReceived ? '' : 'none';
+  // 权限：接收者只保留对话，隐藏5个管理Tab，显示解绑（CSS class 控制）
+  document.body.classList.toggle('receiver-mode', !!avatar._isReceived);
 }
 
 // 管理替身（人设/记忆/喂数据/共享），默认进喂数据页
@@ -3093,59 +3108,140 @@ function copyReferralLink() {
   _copyText(code, '邀请码已复制，发给好友填写即可');
 }
 
-// ─── 语音输入 (STT) ──────────────────────────────────────────
-let _mediaRecorder = null;
-let _audioChunks = [];
-let _isRecording = false;
+// ─── 语音输入 (STT) — 微信风格按住说话 ──────────────────────────
+let _sttMediaRecorder = null;
+let _sttAudioChunks = [];
+let _sttIsRecording = false;
+let _sttCancelled = false;
+let _sttVoiceMode = false;   // 是否处于语音输入模式
+let _sttStartX = 0;          // 按下时的 X 坐标，用于检测左滑取消
 
-async function toggleVoiceRecording() {
-  if (_isRecording) {
-    _stopRecording();
+// 切换语音/文字输入模式（点击麦克风图标）
+function toggleVoiceInputMode() {
+  _sttVoiceMode = !_sttVoiceMode;
+  const row = document.getElementById('chat-input-row');
+  const modeBtn = document.getElementById('voice-mode-btn');
+  const hint = document.getElementById('chat-hint-text');
+  if (_sttVoiceMode) {
+    row.classList.add('voice-input-mode');
+    modeBtn.classList.add('active');
+    modeBtn.title = '切换回文字输入';
+    if (hint) hint.textContent = '按住说话，松开发送，向左滑动取消';
+    _initHoldToSpeak();
   } else {
-    await _startRecording();
+    row.classList.remove('voice-input-mode');
+    modeBtn.classList.remove('active');
+    modeBtn.title = '切换语音输入';
+    if (hint) hint.textContent = 'Enter 发送 · Shift+Enter 换行';
   }
 }
 
-async function _startRecording() {
+// 初始化"按住说话"按钮的事件（只绑定一次）
+let _holdBtnInited = false;
+function _initHoldToSpeak() {
+  if (_holdBtnInited) return;
+  _holdBtnInited = true;
+  const btn = document.getElementById('hold-to-speak-btn');
+
+  // 触屏事件
+  btn.addEventListener('touchstart', e => { e.preventDefault(); _sttStartX = e.touches[0].clientX; _sttBeginRecord(); }, { passive: false });
+  btn.addEventListener('touchmove',  e => { e.preventDefault(); _sttCheckCancel(e.touches[0].clientX); }, { passive: false });
+  btn.addEventListener('touchend',   e => { e.preventDefault(); _sttEndRecord(); });
+  btn.addEventListener('touchcancel',e => { e.preventDefault(); _sttCancelRecord(); });
+
+  // 鼠标事件（PC 调试用）
+  btn.addEventListener('mousedown', e => { _sttStartX = e.clientX; _sttBeginRecord(); });
+  document.addEventListener('mousemove', e => { if (_sttIsRecording) _sttCheckCancel(e.clientX); });
+  document.addEventListener('mouseup',   e => { if (_sttIsRecording) _sttEndRecord(); });
+}
+
+// 开始录音
+async function _sttBeginRecord() {
+  if (_sttIsRecording) return;
   if (!navigator.mediaDevices?.getUserMedia) {
-    toast('当前环境不支持录音，请直接输入文字', 'error');
-    return;
+    toast('当前环境不支持录音', 'error'); return;
   }
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    _audioChunks = [];
-    _mediaRecorder = new MediaRecorder(stream, { mimeType: _getSupportedMime() });
-    _mediaRecorder.ondataavailable = e => { if (e.data.size > 0) _audioChunks.push(e.data); };
-    _mediaRecorder.onstop = _handleRecordingStop;
-    _mediaRecorder.start();
-    _isRecording = true;
-    const btn = document.getElementById('voice-btn');
-    if (btn) { btn.classList.add('recording'); btn.title = '点击停止录音'; btn.textContent = '⏹️'; }
-    toast('录音中，再次点击停止…', 'info');
+    _sttAudioChunks = [];
+    _sttCancelled = false;
+    _sttMediaRecorder = new MediaRecorder(stream, { mimeType: _sttGetMime() });
+    _sttMediaRecorder.ondataavailable = e => { if (e.data.size > 0) _sttAudioChunks.push(e.data); };
+    _sttMediaRecorder.onstop = () => { if (!_sttCancelled) _sttHandleStop(); };
+    _sttMediaRecorder.start();
+    _sttIsRecording = true;
+    // UI
+    const holdBtn = document.getElementById('hold-to-speak-btn');
+    if (holdBtn) { holdBtn.classList.add('pressing'); holdBtn.textContent = '🔴 松开发送'; }
+    _sttShowOverlay(false);
   } catch (e) {
     toast('无法访问麦克风：' + (e.message || e), 'error');
   }
 }
 
-function _stopRecording() {
-  if (_mediaRecorder && _isRecording) {
-    _mediaRecorder.stop();
-    _mediaRecorder.stream?.getTracks().forEach(t => t.stop());
-    _isRecording = false;
-    const btn = document.getElementById('voice-btn');
-    if (btn) { btn.classList.remove('recording'); btn.title = '语音输入'; btn.textContent = '🎤'; }
+// 检测是否左滑取消（滑动超过 60px 进入取消区）
+function _sttCheckCancel(currentX) {
+  const holdBtn = document.getElementById('hold-to-speak-btn');
+  const overlay = document.getElementById('voice-recording-overlay');
+  if (currentX < _sttStartX - 60) {
+    // 取消区
+    if (holdBtn) { holdBtn.classList.add('cancel-zone'); holdBtn.classList.remove('pressing'); holdBtn.textContent = '✕ 松开取消'; }
+    if (overlay) {
+      document.getElementById('overlay-icon').textContent = '✕';
+      document.getElementById('overlay-text').textContent = '松开取消';
+      document.getElementById('overlay-hint').textContent = '向右滑回继续录音';
+    }
+  } else {
+    // 正常录音区
+    if (holdBtn) { holdBtn.classList.remove('cancel-zone'); holdBtn.classList.add('pressing'); holdBtn.textContent = '🔴 松开发送'; }
+    if (overlay) {
+      document.getElementById('overlay-icon').textContent = '🎙️';
+      document.getElementById('overlay-text').textContent = '松开发送';
+      document.getElementById('overlay-hint').textContent = '向左滑动取消';
+    }
   }
 }
 
-async function _handleRecordingStop() {
-  const mime = _getSupportedMime();
-  const blob = new Blob(_audioChunks, { type: mime });
-  if (blob.size < 1000) { toast('录音太短，请重试', 'error'); return; }
+// 松开 → 判断是否取消，然后停止录音
+function _sttEndRecord() {
+  if (!_sttIsRecording) return;
+  const holdBtn = document.getElementById('hold-to-speak-btn');
+  if (holdBtn && holdBtn.classList.contains('cancel-zone')) {
+    _sttCancelRecord();
+  } else {
+    _sttStopMedia(false);
+  }
+}
+
+// 取消录音
+function _sttCancelRecord() {
+  if (!_sttIsRecording) return;
+  _sttStopMedia(true);
+  toast('已取消', 'info');
+}
+
+function _sttStopMedia(cancel) {
+  _sttCancelled = cancel;
+  if (_sttMediaRecorder && _sttIsRecording) {
+    _sttMediaRecorder.stop();
+    _sttMediaRecorder.stream?.getTracks().forEach(t => t.stop());
+    _sttIsRecording = false;
+  }
+  _sttHideOverlay();
+  const holdBtn = document.getElementById('hold-to-speak-btn');
+  if (holdBtn) { holdBtn.classList.remove('pressing','cancel-zone'); holdBtn.textContent = '🎙️ 按住说话'; }
+}
+
+// 录音停止后识别
+async function _sttHandleStop() {
+  const mime = _sttGetMime();
+  const blob = new Blob(_sttAudioChunks, { type: mime });
+  if (blob.size < 500) { toast('录音太短，请重试', 'error'); return; }
 
   toast('识别中…', 'info');
   const formData = new FormData();
   formData.append('audio', blob, 'recording.' + (mime.includes('webm') ? 'webm' : 'mp4'));
-  formData.append('language', 'zh');   // TODO: 按用户设置
+  formData.append('language', 'zh');
 
   try {
     const resp = await fetch(API + '/api/media/stt', {
@@ -3155,12 +3251,11 @@ async function _handleRecordingStop() {
     });
     const data = await resp.json();
     if (!resp.ok) throw new Error(data.error || '识别失败');
-    const input = document.getElementById('chat-input');
     if (data.text) {
-      input.value = (input.value + data.text).trim();
-      input.style.height = 'auto';
-      input.style.height = Math.min(input.scrollHeight, 120) + 'px';
-      toast('识别完成', 'success');
+      // 识别完成 → 自动发送
+      const chatInput = document.getElementById('chat-input');
+      chatInput.value = data.text.trim();
+      sendMessage();
     } else {
       toast('未识别到语音，请重试', 'error');
     }
@@ -3169,11 +3264,28 @@ async function _handleRecordingStop() {
   }
 }
 
-function _getSupportedMime() {
+// 浮层显隐
+function _sttShowOverlay(cancel) {
+  const overlay = document.getElementById('voice-recording-overlay');
+  if (!overlay) return;
+  document.getElementById('overlay-icon').textContent = '🎙️';
+  document.getElementById('overlay-text').textContent = '松开发送';
+  document.getElementById('overlay-hint').textContent = '向左滑动取消';
+  overlay.classList.add('show');
+}
+function _sttHideOverlay() {
+  const overlay = document.getElementById('voice-recording-overlay');
+  if (overlay) overlay.classList.remove('show');
+}
+
+function _sttGetMime() {
   const mimes = ['audio/webm;codecs=opus','audio/webm','audio/ogg;codecs=opus','audio/mp4'];
   for (const m of mimes) { if (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(m)) return m; }
   return 'audio/webm';
 }
+
+// 兼容旧代码引用
+function _getSupportedMime() { return _sttGetMime(); }
 
 // ─── 图片上传 (Vision) ───────────────────────────────────────
 let _pendingImageDesc = null;

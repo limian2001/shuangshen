@@ -124,7 +124,7 @@ def _tc3_request(
 
 
 # ──────────────────────────────────────────────────────────────────────
-# Vision — Claude (Anthropic) 图像理解
+# Vision — 图像理解（通过配置的 LLM Provider 路由）
 # ──────────────────────────────────────────────────────────────────────
 
 VISION_PROMPT = (
@@ -135,46 +135,15 @@ VISION_PROMPT = (
 
 def vision_describe(image_bytes: bytes, media_type: str = "image/jpeg") -> str:
     """
-    调用 Anthropic Claude Vision 描述图片。
+    调用当前配置的 LLM Provider 描述图片（deepseek / anthropic / openai 均支持）。
     返回中文描述；失败抛 RuntimeError。
     """
-    api_key = config.ANTHROPIC_API_KEY
-    if not api_key or api_key.startswith("sk-ant-xxx"):
-        raise RuntimeError("ANTHROPIC_API_KEY 未配置，无法使用图片识别")
-
-    b64 = base64.b64encode(image_bytes).decode()
-    payload = json.dumps({
-        "model": "claude-3-5-sonnet-20241022",
-        "max_tokens": 300,
-        "messages": [{
-            "role": "user",
-            "content": [
-                {
-                    "type": "image",
-                    "source": {"type": "base64", "media_type": media_type, "data": b64},
-                },
-                {"type": "text", "text": VISION_PROMPT},
-            ],
-        }],
-    }).encode()
-
-    req = urllib.request.Request(
-        "https://api.anthropic.com/v1/messages",
-        data=payload,
-        headers={
-            "Content-Type": "application/json",
-            "x-api-key": api_key,
-            "anthropic-version": "2023-06-01",
-        },
-        method="POST",
-    )
+    from backend.services.llm_provider import llm
     try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            data = json.loads(resp.read())
-        return data["content"][0]["text"].strip()
+        return llm.describe_image(image_bytes, media_type, VISION_PROMPT)
     except urllib.error.HTTPError as e:
         body = e.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"Claude Vision 错误 {e.code}: {body}") from e
+        raise RuntimeError(f"Vision API 错误 {e.code}: {body}") from e
 
 
 # ──────────────────────────────────────────────────────────────────────
