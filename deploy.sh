@@ -10,18 +10,14 @@ IMAGE_NAME="shuangshen"
 CONTAINER_NAME="shuangshen"
 DATA_DIR="$APP_DIR/data"
 
-echo "📦 [1/4] 拉取最新代码..."
-cd "$APP_DIR"
-git pull origin main
-
-echo "🔨 [2/4] 构建 Docker 镜像..."
+echo "🔨 [1/4] 构建 Docker 镜像..."
 docker build -t "$IMAGE_NAME" .
 
-echo "🔄 [3/4] 停止旧容器..."
+echo "🔄 [2/4] 停止旧容器..."
 docker stop "$CONTAINER_NAME" 2>/dev/null || true
 docker rm   "$CONTAINER_NAME" 2>/dev/null || true
 
-echo "🚀 [4/4] 启动新容器..."
+echo "🚀 [3/3] 启动新容器..."
 docker run -d \
   --name "$CONTAINER_NAME" \
   -p 5000:5000 \
