@@ -175,3 +175,20 @@
   color: #ccc;
   padding: 48rpx 32rpx 80rpx;
 }
+
+/* 游客进入按钮（描边样式） */
+.cta-btn-ghost {
+  margin-top: 20rpx;
+  background: transparent;
+  color: #534AB7;
+  font-size: 30rpx;
+  font-weight: 500;
+  border-radius: 56rpx;
+  padding: 0;
+  height: 88rpx;
+  line-height: 84rpx;
+  border: 2rpx solid #534AB7;
+  width: 100%;
+  box-sizing: border-box;
+}
+.cta-btn-ghost::after { border: none; }

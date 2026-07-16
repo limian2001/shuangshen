@@ -66,6 +66,7 @@
   <!-- 登录按钮 -->
   <view class="cta-section">
     <button class="cta-btn" bindtap="goLogin">免费创建 AI 替身</button>
+    <button class="cta-btn-ghost" bindtap="goGuest">游客进入，先逛逛</button>
     <view class="cta-hint">一分钟上手 · 随时随地对话</view>
   </view>
 

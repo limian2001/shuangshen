@@ -6,6 +6,7 @@ const app = getApp();
 Page({
   data: {
     isLoggedIn: false,
+    isGuest: false,
     webviewUrl: '',
     refCode: '',
   },
@@ -25,9 +26,11 @@ Page({
   },
 
   // 从登录页返回后触发，刷新登录状态
+  // 注意：游客浏览中登录成功后也要切回带 token 的 webview
   onShow() {
     const token = app.globalData.token;
-    if (token && !this.data.isLoggedIn) {
+    if (token && (!this.data.isLoggedIn || this.data.isGuest)) {
+      this.setData({ isGuest: false });
       this._loadWebview({});
     }
   },
@@ -56,6 +59,16 @@ Page({
   // 落地页"立即体验"按钮
   goLogin() {
     wx.navigateTo({ url: '/pages/login/login' });
+  },
+
+  // 游客进入：不带 token 打开 webview，网页端进入游客模式
+  goGuest() {
+    const baseUrl = app.globalData.apiBase;
+    this.setData({
+      isLoggedIn: true,
+      isGuest: true,
+      webviewUrl: `${baseUrl}/app?guest=1`,
+    });
   },
 
   // 转发给朋友

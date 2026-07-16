@@ -140,10 +140,11 @@ def upload_voice_sample(avatar_id):
     if avatar["creator_id"] != g.user_id:
         return jsonify({"error": "无权限"}), 403
 
-    # 上传数量检查
+    # 上传数量检查（只统计成功的样本，失败的不占配额）
     with get_db() as conn:
         sample_count = conn.execute(
-            "SELECT COUNT(*) FROM voice_samples WHERE avatar_id = ?", (avatar_id,)
+            "SELECT COUNT(*) FROM voice_samples WHERE avatar_id = ? AND status != 'failed'",
+            (avatar_id,)
         ).fetchone()[0]
     if sample_count >= 5:
         return jsonify({"error": "每个替身最多上传 5 个声音样本"}), 400
@@ -194,6 +195,10 @@ def upload_voice_sample(avatar_id):
             conn.execute(
                 "UPDATE voice_samples SET status='failed' WHERE id=?", (sample_id,)
             )
+        try:
+            file_path.unlink(missing_ok=True)
+        except Exception:
+            pass
         return jsonify({"error": str(e)}), 503
 
     return jsonify({"sample_id": sample_id, "message": status_msg})

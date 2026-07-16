@@ -2,8 +2,8 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="ss-build" content="20260716-3">
-<script>const SS_BUILD = '20260716-3'; console.log('ss-build: ' + SS_BUILD);</script>
+<meta name="ss-build" content="20260716-5">
+<script>const SS_BUILD = '20260716-5'; console.log('ss-build: ' + SS_BUILD);</script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>替身 · Shuangshen</title>
 <style>
@@ -1254,6 +1254,7 @@ body.is-mobile .row .field   { width: 100%; }
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://res.wx.qq.com/open/js/jweixin-1.6.0.js"></script>
 <script>
 // 本地开发用 localhost，线上自动使用当前域名（Nginx 反代）
 const API = window.location.hostname === 'localhost' ? 'http://localhost:5000' : '';
@@ -1417,7 +1418,8 @@ window.onload = () => {
     showApp();
     showPage('avatars');
     loadAvatars();
-  } else if (sessionStorage.getItem('ss_guest') === '1') {
+  } else if (params.get('guest') === '1' || sessionStorage.getItem('ss_guest') === '1') {
+    // 小程序"游客进入"带 guest=1 参数打开 webview
     enterGuestMode();
   } else {
     showAuth();
@@ -1443,7 +1445,14 @@ function requireLogin() {
   if (token) return true;
   toast('请先登录后使用此功能', 'error');
   sessionStorage.removeItem('ss_guest');
-  setTimeout(() => { showAuth(); showLogin(); }, 800);
+  setTimeout(() => {
+    if (window.__wxjs_environment === 'miniprogram' && window.wx && wx.miniProgram) {
+      // 小程序内：跳回原生登录页（手机号登录）
+      wx.miniProgram.navigateTo({ url: '/pages/login/login' });
+    } else {
+      showAuth(); showLogin();
+    }
+  }, 800);
   return false;
 }
 
@@ -1942,9 +1951,8 @@ function appendMsg(role, content, animate, intercepted) {
   const bubbleHtml = `${esc(renderEmoji(content)).replace(/\n/g,'<br>')}${intercepted ? '<span class="intercept-badge">已拦截</span>' : ''}`;
   const aiBadge = isUser ? '' : '<span style="display:block;font-size:10px;color:var(--text-3);margin-top:3px;text-align:right">AI 生成</span>';
 
-  // TTS 控件：所有 bot 消息都显示小喇叭
-  // 有克隆声音→模仿本人音色；无克隆声音→标准普通话（后端自动降级）
-  const voiceCtrl = !isUser
+  // TTS 控件：只在替身声音克隆成功时显示小喇叭（播放模仿本人的声音）
+  const voiceCtrl = (!isUser && _avatarHasVoice)
     ? `<div class="msg-audio" id="audio-wrap-${idx}" style="display:none"><audio id="audio-${idx}" controls></audio></div><span class="msg-voice-toggle" data-idx="${idx}">🔊 点击播放语音</span>`
     : aiBadge;
 
@@ -1959,7 +1967,7 @@ function appendMsg(role, content, animate, intercepted) {
   box.appendChild(div);
 
   // 绑定 toggle 事件（按需加载：用户点击喇叭才合成语音）
-  if (!isUser) {
+  if (!isUser && _avatarHasVoice) {
     const toggleEl = div.querySelector('.msg-voice-toggle');
     if (toggleEl) toggleEl.addEventListener('click', () => toggleMsgVoice(idx, content));
     _msgVoiceMode[idx] = 'text';  // 默认文字模式，不自动调用TTS

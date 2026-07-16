@@ -42,29 +42,31 @@ def stt_recognize(audio_bytes: bytes, language: str = "zh", filename: str = "") 
     engine_map = {"zh": "16k_zh", "yue": "16k_yue", "en": "16k_en"}
     engine = engine_map.get(language, "16k_zh")
 
-    # VoiceFormat: 1=wav 4=pcm 6=mp3 8=silk 10=opus 12=ogg-opus 14=m4a
-    # Chrome MediaRecorder 录制的是 webm/opus → 按 ogg-opus(12) 发送
+    # SentenceRecognition 的 VoiceFormat 是字符串：
+    # wav / pcm / ogg-opus / speex / silk / mp3 / m4a / aac / amr
     fn = (filename or "").lower()
     if fn.endswith(".wav"):
-        voice_fmt = 1
+        voice_fmt = "wav"
     elif fn.endswith(".mp3"):
-        voice_fmt = 6
+        voice_fmt = "mp3"
     elif fn.endswith(".ogg"):
-        voice_fmt = 12
-    elif fn.endswith(".m4a") or fn.endswith(".aac"):
-        voice_fmt = 14
-    elif fn.endswith(".mp4"):
-        voice_fmt = 14   # mp4 容器通常为 aac
+        voice_fmt = "ogg-opus"
+    elif fn.endswith(".m4a"):
+        voice_fmt = "m4a"
+    elif fn.endswith(".aac") or fn.endswith(".mp4"):
+        voice_fmt = "aac"
     else:
-        voice_fmt = 12   # webm/opus → ogg-opus 最接近
+        voice_fmt = "ogg-opus"   # webm/opus 尽力按 ogg-opus 处理
 
     payload_obj = {
-        "EngineModelType": engine,
-        "ChannelNum": 1,
-        "ResTextFormat": 0,
+        "EngSerViceType": engine,      # 注意：官方参数名就是这个拼写
         "SourceType": 1,
         "VoiceFormat": voice_fmt,
+        "UsrAudioKey": _rand_id(),
         "Data": base64.b64encode(audio_bytes).decode(),
+        "DataLen": len(audio_bytes),
+        "ProjectId": 0,
+        "SubServiceType": 2,
     }
     payload_str = json.dumps(payload_obj, separators=(",", ":"))
 
@@ -78,8 +80,13 @@ def stt_recognize(audio_bytes: bytes, language: str = "zh", filename: str = "") 
         secret_key=skey,
         payload_str=payload_str,
     )
-    # 腾讯云返回格式: {"Response": {"Result": "...", "RequestId": "..."}}
-    return resp.get("Response", {}).get("Result", "")
+    # 返回格式: {"Response": {"Result": "...", "RequestId": "..."}}
+    # 注意：腾讯云出错时 HTTP 仍是 200，错误在 Response.Error 里，必须显式检查
+    r = resp.get("Response", {})
+    if "Error" in r:
+        err = r["Error"]
+        raise RuntimeError(f"腾讯ASR错误 {err.get('Code','')}: {err.get('Message','')}")
+    return r.get("Result", "")
 
 
 def _tc3_request(
@@ -426,7 +433,12 @@ def voice_clone_upload(avatar_id: str, sample_bytes: bytes, filename: str) -> st
         "model_type": 1,                # 1=ICL 声音复刻
     }).encode()
 
-    headers = _volc_headers(app_id, api_key, {"Content-Type": "application/json"})
+    # V1 mega_tts 接口认证：Bearer;token + Resource-Id（不是 X-Api-* 头）
+    headers = {
+        "Content-Type":  "application/json",
+        "Authorization": f"Bearer;{api_key}",
+        "Resource-Id":   "seed-icl-1.0",
+    }
     req = urllib.request.Request(VOLC_CLONE_UPLOAD_URL, data=payload, headers=headers, method="POST")
     try:
         with urllib.request.urlopen(req, timeout=60) as resp:
@@ -453,7 +465,11 @@ def voice_clone_status(speaker_id: str) -> dict:
         "appid":      app_id,
         "speaker_id": speaker_id,
     }).encode()
-    headers = _volc_headers(app_id, api_key, {"Content-Type": "application/json"})
+    headers = {
+        "Content-Type":  "application/json",
+        "Authorization": f"Bearer;{api_key}",
+        "Resource-Id":   "seed-icl-1.0",
+    }
     req = urllib.request.Request(VOLC_CLONE_STATUS_URL, data=payload, headers=headers, method="POST")
     try:
         with urllib.request.urlopen(req, timeout=15) as resp:
