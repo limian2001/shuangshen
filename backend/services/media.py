@@ -25,10 +25,11 @@ from backend.core.config import config
 # STT — 腾讯云 SentenceRecognition
 # ──────────────────────────────────────────────────────────────────────
 
-def stt_recognize(audio_bytes: bytes, language: str = "zh") -> str:
+def stt_recognize(audio_bytes: bytes, language: str = "zh", filename: str = "") -> str:
     """
     语音转文字。
     language: "zh" | "yue" | "en"
+    filename:  用于推断音频格式（webm/mp4/wav/mp3/ogg）
     Returns 识别文本；失败抛 RuntimeError。
     """
     sid = config.TENCENT_ASR_SECRET_ID
@@ -41,11 +42,28 @@ def stt_recognize(audio_bytes: bytes, language: str = "zh") -> str:
     engine_map = {"zh": "16k_zh", "yue": "16k_yue", "en": "16k_en"}
     engine = engine_map.get(language, "16k_zh")
 
+    # VoiceFormat: 1=wav 4=pcm 6=mp3 8=silk 10=opus 12=ogg-opus 14=m4a
+    # Chrome MediaRecorder 录制的是 webm/opus → 按 ogg-opus(12) 发送
+    fn = (filename or "").lower()
+    if fn.endswith(".wav"):
+        voice_fmt = 1
+    elif fn.endswith(".mp3"):
+        voice_fmt = 6
+    elif fn.endswith(".ogg"):
+        voice_fmt = 12
+    elif fn.endswith(".m4a") or fn.endswith(".aac"):
+        voice_fmt = 14
+    elif fn.endswith(".mp4"):
+        voice_fmt = 14   # mp4 容器通常为 aac
+    else:
+        voice_fmt = 12   # webm/opus → ogg-opus 最接近
+
     payload_obj = {
         "EngineModelType": engine,
         "ChannelNum": 1,
         "ResTextFormat": 0,
         "SourceType": 1,
+        "VoiceFormat": voice_fmt,
         "Data": base64.b64encode(audio_bytes).decode(),
     }
     payload_str = json.dumps(payload_obj, separators=(",", ":"))
@@ -137,8 +155,7 @@ VOLC_TTS_WS_URL = "wss://openspeech.bytedance.com/api/v3/tts/bidirection"
 
 # 声音复刻 HTTP 端点（mega_tts，新版鉴权）
 VOLC_CLONE_UPLOAD_URL = "https://openspeech.bytedance.com/api/v1/mega_tts/audio/upload"
-VOLC_CLONE_CREATE_URL = "https://openspeech.bytedance.com/api/v1/mega_tts/train/icl"
-VOLC_CLONE_STATUS_URL = "https://openspeech.bytedance.com/api/v1/mega_tts/train/status"
+VOLC_CLONE_STATUS_URL = "https://openspeech.bytedance.com/api/v1/mega_tts/status"
 
 # 默认音色（seed-tts-2.0 新版音色名）
 DEFAULT_VOICE_MAP = {
@@ -382,88 +399,74 @@ def _volc_headers(app_id: str, api_key: str, extra: dict | None = None) -> dict:
 def voice_clone_upload(avatar_id: str, sample_bytes: bytes, filename: str) -> str:
     """
     上传声音样本到火山引擎 mega_tts，返回 audio_id。
+    接口接受 JSON + base64 编码音频（非 multipart）。
     """
     app_id  = config.VOLC_APP_ID
     api_key = config.VOLC_API_KEY
     if not app_id or not api_key:
         raise RuntimeError("火山引擎 TTS 未配置")
 
-    boundary = "----FormBoundary" + _rand_id()[:16]
     _fn = filename.lower()
-    ctype = ("audio/mpeg" if _fn.endswith(".mp3")  else
-             "audio/mp4"  if _fn.endswith(".m4a")  else
-             "audio/aac"  if _fn.endswith(".aac")  else
-             "audio/webm" if _fn.endswith(".webm") else
-             "audio/ogg"  if _fn.endswith(".ogg")  else
-             "audio/wav")
+    audio_fmt = ("mp3"  if _fn.endswith(".mp3")  else
+                 "m4a"  if _fn.endswith(".m4a")  else
+                 "aac"  if _fn.endswith(".aac")  else
+                 "ogg"  if _fn.endswith(".ogg")  else
+                 "wav"  if _fn.endswith(".wav")  else
+                 "webm")   # Chrome 录制默认 webm
 
-    parts = [
-        f"--{boundary}\r\nContent-Disposition: form-data; name=\"speaker_id\"\r\n\r\n{avatar_id[:64]}",
-        f"--{boundary}\r\nContent-Disposition: form-data; name=\"audio_file\"; filename=\"{filename}\"\r\nContent-Type: {ctype}\r\n\r\n",
-    ]
-    body = ("\r\n".join(parts)).encode() + sample_bytes + f"\r\n--{boundary}--\r\n".encode()
+    payload = json.dumps({
+        "appid":      app_id,           # 必填
+        "speaker_id": avatar_id[:64],
+        "audios": [{
+            "audio_bytes": base64.b64encode(sample_bytes).decode(),
+            "audio_format": audio_fmt,
+        }],
+        "source":     2,                # 固定值 2
+        "language":   0,                # 0=中文
+        "model_type": 1,                # 1=ICL 声音复刻
+    }).encode()
 
-    headers = _volc_headers(app_id, api_key,
-                            {"Content-Type": f"multipart/form-data; boundary={boundary}"})
-    req = urllib.request.Request(VOLC_CLONE_UPLOAD_URL, data=body, headers=headers, method="POST")
+    headers = _volc_headers(app_id, api_key, {"Content-Type": "application/json"})
+    req = urllib.request.Request(VOLC_CLONE_UPLOAD_URL, data=payload, headers=headers, method="POST")
     try:
         with urllib.request.urlopen(req, timeout=60) as resp:
             data = json.loads(resp.read())
         if data.get("BaseResp", {}).get("StatusCode") != 0:
             raise RuntimeError(f"声音上传失败: {data}")
-        return data.get("audio_id", "")
+        # 上传即触发训练，接口直接返回 speaker_id
+        return data.get("speaker_id", avatar_id[:64])
     except urllib.error.HTTPError as e:
         body_err = e.read().decode("utf-8", errors="replace")
         raise RuntimeError(f"声音上传错误 {e.code}: {body_err}") from e
 
 
-def voice_clone_train(avatar_id: str, audio_ids: list[str], language: str = "zh") -> str:
-    """
-    提交声音复刻训练任务，返回 speaker_id。
-    """
-    app_id  = config.VOLC_APP_ID
-    api_key = config.VOLC_API_KEY
-
-    payload = json.dumps({
-        "speaker_id": avatar_id[:64],
-        "audio_ids":  audio_ids,
-        "language":   language,
-    }).encode()
-
-    headers = _volc_headers(app_id, api_key, {"Content-Type": "application/json"})
-    req = urllib.request.Request(VOLC_CLONE_CREATE_URL, data=payload, headers=headers, method="POST")
-    try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            data = json.loads(resp.read())
-        if data.get("BaseResp", {}).get("StatusCode") != 0:
-            raise RuntimeError(f"训练提交失败: {data}")
-        return data.get("speaker_id", avatar_id[:64])
-    except urllib.error.HTTPError as e:
-        body_err = e.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"声音训练错误 {e.code}: {body_err}") from e
-
-
 def voice_clone_status(speaker_id: str) -> dict:
     """
     查询声音克隆训练状态。
+    API status 枚举: 0=NotFound 1=Training 2=Success 3=Failed 4=Active
     Returns: {"status": "training"|"success"|"failed", "voice_id": "..."}
     """
     app_id  = config.VOLC_APP_ID
     api_key = config.VOLC_API_KEY
 
-    payload = json.dumps({"speaker_id": speaker_id}).encode()
+    payload = json.dumps({
+        "appid":      app_id,
+        "speaker_id": speaker_id,
+    }).encode()
     headers = _volc_headers(app_id, api_key, {"Content-Type": "application/json"})
     req = urllib.request.Request(VOLC_CLONE_STATUS_URL, data=payload, headers=headers, method="POST")
     try:
         with urllib.request.urlopen(req, timeout=15) as resp:
             data = json.loads(resp.read())
-        train_status = data.get("train_status", 0)   # 0=training, 1=success, 2=failed
-        status_map = {0: "training", 1: "success", 2: "failed"}
-        return {
-            "status":   status_map.get(train_status, "training"),
-            "voice_id": speaker_id if train_status == 1 else "",
-        }
-    except urllib.error.HTTPError as e:
+        # status 字段: 0=NotFound, 1=Training, 2=Success, 3=Failed, 4=Active
+        s = data.get("status", 0)
+        if s in (2, 4):   # Success / Active — 均可调用 TTS
+            return {"status": "success", "voice_id": speaker_id}
+        elif s == 3:
+            return {"status": "failed", "voice_id": ""}
+        else:
+            return {"status": "training", "voice_id": ""}
+    except urllib.error.HTTPError:
         return {"status": "failed", "voice_id": ""}
 
 

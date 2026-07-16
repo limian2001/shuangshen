@@ -18,7 +18,6 @@ from backend.services.media import (
     stt_recognize,
     tts_synthesize,
     voice_clone_upload,
-    voice_clone_train,
     voice_clone_status,
 )
 
@@ -57,8 +56,10 @@ def stt_endpoint():
     if language not in ("zh", "yue", "en"):
         language = "zh"
 
+    filename = audio_file.filename or ""
+
     try:
-        text = stt_recognize(audio_bytes, language)
+        text = stt_recognize(audio_bytes, language, filename)
     except RuntimeError as e:
         return jsonify({"error": str(e)}), 503
 
@@ -168,36 +169,18 @@ def upload_voice_sample(avatar_id):
             (sample_id, avatar_id, filename, str(file_path)),
         )
 
-    # 上传到火山引擎 + 触发训练
+    # 上传到火山引擎（upload 接口同时触发训练，返回 speaker_id）
     try:
-        audio_id = voice_clone_upload(avatar_id, audio_bytes, filename)
+        speaker_id = voice_clone_upload(avatar_id, audio_bytes, filename)
         with get_db() as conn:
             conn.execute(
-                "UPDATE voice_samples SET clone_voice_id=?, status='uploaded' WHERE id=?",
-                (audio_id, sample_id),
+                "UPDATE voice_samples SET clone_voice_id=?, status='training' WHERE id=?",
+                (speaker_id, sample_id),
             )
-
-        # 拉所有已上传的 audio_id 提交训练
-        with get_db() as conn:
-            audio_ids = [
-                r["clone_voice_id"]
-                for r in rows_to_list(conn.execute(
-                    "SELECT clone_voice_id FROM voice_samples WHERE avatar_id=? AND status='uploaded'",
-                    (avatar_id,),
-                ).fetchall())
-                if r["clone_voice_id"]
-            ]
-        if audio_ids:
-            speaker_id = voice_clone_train(avatar_id, audio_ids, language)
-            with get_db() as conn:
-                conn.execute(
-                    "UPDATE voice_samples SET status='training' WHERE avatar_id=?",
-                    (avatar_id,),
-                )
-                conn.execute(
-                    "UPDATE avatars SET voice_model_id=?, voice_language=? WHERE id=?",
-                    (speaker_id, language, avatar_id),
-                )
+            conn.execute(
+                "UPDATE avatars SET voice_model_id=?, voice_language=? WHERE id=?",
+                (speaker_id, language, avatar_id),
+            )
         status_msg = "已提交声音克隆训练，请稍后查看状态"
     except RuntimeError as e:
         with get_db() as conn:

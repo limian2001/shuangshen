@@ -2,6 +2,8 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
+<meta name="ss-build" content="20260716-1">
+<script>console.log('ss-build: 20260716-1');</script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>替身 · Shuangshen</title>
 <style>
@@ -178,6 +180,8 @@ select { cursor: pointer; }
 #voice-recording-overlay.show { display: block; }
 #voice-recording-overlay .overlay-icon { font-size: 36px; display: block; margin-bottom: 6px; }
 #voice-recording-overlay .overlay-hint { font-size: 12px; color: rgba(255,255,255,.7); margin-top: 4px; }
+#voice-recording-overlay .overlay-wave { display: flex; align-items: center; justify-content: center; gap: 3px; height: 44px; margin-bottom: 6px; }
+#voice-recording-overlay .overlay-wave span { width: 4px; height: 4px; border-radius: 2px; background: #4ade80; transition: height .06s linear; }
 .msg-audio { margin-top: 5px; }
 .msg-audio audio { width: 100%; max-width: 220px; height: 32px; border-radius: 16px; }
 .msg-voice-toggle { font-size: 11px; color: var(--purple); cursor: pointer; margin-top: 2px; display: inline-block; opacity: .8; }
@@ -696,7 +700,10 @@ body.is-mobile .row .field   { width: 100%; }
     </div>
     <!-- 录音状态浮层 -->
     <div id="voice-recording-overlay">
-      <span class="overlay-icon" id="overlay-icon">🎙️</span>
+      <div class="overlay-wave" id="overlay-wave">
+        <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+      </div>
+      <span class="overlay-icon" id="overlay-icon" style="display:none">🎙️</span>
       <div id="overlay-text">松开发送</div>
       <div class="overlay-hint" id="overlay-hint">向左滑动取消</div>
     </div>
@@ -1545,8 +1552,17 @@ function setCurrentAvatar(avatar) {
   document.getElementById('share-code-display').textContent = avatar.share_code || '加载中...';
 
   // 权限：接收者只保留对话，隐藏5个管理Tab，显示解绑
+  // 判断依据（服务端事实优先，不依赖调用方传标志）：
+  //   1. creator_id 存在且 ≠ 当前用户 → 一定是接收者
+  //   2. creator_id 缺失时退回 _isReceived 标志
+  let isReceived;
+  if (avatar.creator_id && currentUser?.user_id) {
+    isReceived = avatar.creator_id !== currentUser.user_id;
+  } else {
+    isReceived = !!avatar._isReceived;
+  }
+  avatar._isReceived = isReceived;  // 回写，供 showAvatarPage/checkAvatarVoice 等下游使用
   // 用 setProperty('display', ..., 'important') 保证任何 CSS/WebView 环境都生效
-  const isReceived = !!avatar._isReceived;
   document.body.classList.toggle('receiver-mode', isReceived);
   const creatorIds = ['snav-memories','snav-ingest','snav-identity','snav-voice','snav-share',
                       'msnav-memories','msnav-ingest','msnav-identity','msnav-voice','msnav-share'];
@@ -2451,7 +2467,8 @@ async function loadBoundAvatarsSection() {
   const list = await api('GET', '/api/avatars/received');
   if (!list || list.length === 0) { el.innerHTML = ''; return; }
   el.innerHTML = list.map(a => {
-    const aj = JSON.stringify(a).replace(/"/g, '&quot;');
+    const av = { ...a, _isReceived: true };
+    const aj = JSON.stringify(av).replace(/"/g, '&quot;');
     return `
     <div class="avatar-card" style="border-color:var(--border-md)">
       <div class="avatar-card-header">
@@ -3146,6 +3163,52 @@ function _initHoldToSpeak() {
   document.addEventListener('mouseup',   e => { if (_sttIsRecording) _sttEndRecord(); });
 }
 
+// ─── 实时声波可视化 ───
+// 用 AnalyserNode 取时域数据算音量(RMS)，映射到 15 根波条高度。
+// 有声音→波浪起伏（声音大波高）；无声音→波条几乎不可见。
+let _sttAudioCtx = null, _sttAnalyser = null, _sttWaveRAF = null;
+
+function _sttStartWave(stream) {
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    _sttAudioCtx = new AC();
+    // iOS/微信 WebView 中 AudioContext 可能以 suspended 启动
+    if (_sttAudioCtx.state === 'suspended') _sttAudioCtx.resume();
+    const source = _sttAudioCtx.createMediaStreamSource(stream);
+    _sttAnalyser = _sttAudioCtx.createAnalyser();
+    _sttAnalyser.fftSize = 512;
+    source.connect(_sttAnalyser);
+
+    const bars = document.querySelectorAll('#overlay-wave span');
+    const buf = new Uint8Array(_sttAnalyser.fftSize);
+    const heights = new Array(bars.length).fill(4);
+
+    const draw = () => {
+      _sttAnalyser.getByteTimeDomainData(buf);
+      // RMS 音量（0~1）
+      let sum = 0;
+      for (let i = 0; i < buf.length; i++) { const d = (buf[i] - 128) / 128; sum += d * d; }
+      const rms = Math.sqrt(sum / buf.length);
+      // 波条左移一格，新音量进入最右侧 → 滚动波形效果
+      heights.shift();
+      // 静音阈值：低于 0.01 视为无声，波条最小高度
+      const h = rms < 0.01 ? 4 : Math.min(44, 4 + rms * 400);
+      heights.push(h);
+      bars.forEach((b, i) => { b.style.height = heights[i] + 'px'; });
+      _sttWaveRAF = requestAnimationFrame(draw);
+    };
+    _sttWaveRAF = requestAnimationFrame(draw);
+  } catch (e) { /* 可视化失败不影响录音 */ }
+}
+
+function _sttStopWave() {
+  if (_sttWaveRAF) { cancelAnimationFrame(_sttWaveRAF); _sttWaveRAF = null; }
+  if (_sttAudioCtx) { try { _sttAudioCtx.close(); } catch (e) {} _sttAudioCtx = null; }
+  _sttAnalyser = null;
+  document.querySelectorAll('#overlay-wave span').forEach(b => { b.style.height = '4px'; });
+}
+
 // 开始录音
 let _sttPendingStop = false;  // 记录用户在 getUserMedia 完成前已经松手
 async function _sttBeginRecord() {
@@ -3183,8 +3246,11 @@ async function _sttBeginRecord() {
     const holdBtn = document.getElementById('hold-to-speak-btn');
     if (holdBtn) { holdBtn.classList.add('pressing'); holdBtn.textContent = '🔴 松开发送'; }
     _sttShowOverlay(false);
+    _sttStartWave(stream);
   } catch (e) {
     toast('无法访问麦克风：' + (e.message || e), 'error');
+    const holdBtn = document.getElementById('hold-to-speak-btn');
+    if (holdBtn) { holdBtn.classList.remove('pressing','cancel-zone'); holdBtn.textContent = '🎙️ 按住说话'; }
   }
 }
 
@@ -3196,7 +3262,9 @@ function _sttCheckCancel(currentX) {
     // 取消区
     if (holdBtn) { holdBtn.classList.add('cancel-zone'); holdBtn.classList.remove('pressing'); holdBtn.textContent = '✕ 松开取消'; }
     if (overlay) {
-      document.getElementById('overlay-icon').textContent = '✕';
+      const icon = document.getElementById('overlay-icon');
+      icon.textContent = '✕'; icon.style.display = 'block';
+      document.getElementById('overlay-wave').style.display = 'none';
       document.getElementById('overlay-text').textContent = '松开取消';
       document.getElementById('overlay-hint').textContent = '向右滑回继续录音';
     }
@@ -3204,7 +3272,8 @@ function _sttCheckCancel(currentX) {
     // 正常录音区
     if (holdBtn) { holdBtn.classList.remove('cancel-zone'); holdBtn.classList.add('pressing'); holdBtn.textContent = '🔴 松开发送'; }
     if (overlay) {
-      document.getElementById('overlay-icon').textContent = '🎙️';
+      document.getElementById('overlay-icon').style.display = 'none';
+      document.getElementById('overlay-wave').style.display = 'flex';
       document.getElementById('overlay-text').textContent = '松开发送';
       document.getElementById('overlay-hint').textContent = '向左滑动取消';
     }
@@ -3213,7 +3282,12 @@ function _sttCheckCancel(currentX) {
 
 // 松开 → 判断是否取消，然后停止录音
 function _sttEndRecord() {
-  if (!_sttIsRecording) return;
+  if (!_sttIsRecording) {
+    // 权限弹框/getUserMedia 未完成时松手：标记 pending，
+    // 否则授权完成后录音会在无人按住的情况下"幽灵启动"且永不停止
+    _sttPendingStop = true;
+    return;
+  }
   const holdBtn = document.getElementById('hold-to-speak-btn');
   if (holdBtn && holdBtn.classList.contains('cancel-zone')) {
     _sttCancelRecord();
@@ -3224,13 +3298,14 @@ function _sttEndRecord() {
 
 // 取消录音
 function _sttCancelRecord() {
-  if (!_sttIsRecording) return;
+  if (!_sttIsRecording) { _sttPendingStop = true; return; }
   _sttStopMedia(true);
   toast('已取消', 'info');
 }
 
 function _sttStopMedia(cancel) {
   _sttCancelled = cancel;
+  _sttStopWave();
   if (_sttMediaRecorder && _sttIsRecording) {
     try { _sttMediaRecorder.stop(); } catch(e) {}
     // track 停止在 onstop 里做，防止丢数据
@@ -3280,7 +3355,8 @@ async function _sttHandleStop() {
 function _sttShowOverlay(cancel) {
   const overlay = document.getElementById('voice-recording-overlay');
   if (!overlay) return;
-  document.getElementById('overlay-icon').textContent = '🎙️';
+  document.getElementById('overlay-icon').style.display = 'none';
+  document.getElementById('overlay-wave').style.display = 'flex';
   document.getElementById('overlay-text').textContent = '松开发送';
   document.getElementById('overlay-hint').textContent = '向左滑动取消';
   overlay.classList.add('show');

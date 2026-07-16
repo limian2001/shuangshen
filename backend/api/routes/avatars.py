@@ -274,7 +274,7 @@ def received_avatars():
     """接收者：查看绑定的替身列表"""
     with get_db() as conn:
         rows = rows_to_list(conn.execute(
-            """SELECT a.id, a.name, a.relationship, a.status,
+            """SELECT a.id, a.name, a.relationship, a.status, a.creator_id,
                       a.voice_model_id, a.voice_language, ar.bound_at
                FROM avatars a
                JOIN avatar_receivers ar ON a.id = ar.avatar_id
