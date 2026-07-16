@@ -307,6 +307,10 @@ def _run_migrations(conn: sqlite3.Connection):
         "CREATE INDEX IF NOT EXISTS idx_image_cache_avatar ON image_cache(avatar_id)",
         # v1.1: voice_model_id 已在 SCHEMA 中, 补 voice_language 字段
         "ALTER TABLE avatars ADD COLUMN voice_language TEXT DEFAULT 'zh'",
+        # v1.2: 语音消息（用户发语音，气泡可重播；content 存 ASR 识别文本供 LLM 用）
+        "ALTER TABLE chat_messages ADD COLUMN msg_type TEXT DEFAULT 'text'",
+        "ALTER TABLE chat_messages ADD COLUMN audio_path TEXT DEFAULT NULL",
+        "ALTER TABLE chat_messages ADD COLUMN duration INTEGER DEFAULT 0",
     ]
     for sql in migrations:
         try:

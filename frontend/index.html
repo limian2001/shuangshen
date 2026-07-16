@@ -2,8 +2,8 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="ss-build" content="20260716-1">
-<script>console.log('ss-build: 20260716-1');</script>
+<meta name="ss-build" content="20260716-3">
+<script>const SS_BUILD = '20260716-3'; console.log('ss-build: ' + SS_BUILD);</script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>替身 · Shuangshen</title>
 <style>
@@ -180,6 +180,9 @@ select { cursor: pointer; }
 #voice-recording-overlay.show { display: block; }
 #voice-recording-overlay .overlay-icon { font-size: 36px; display: block; margin-bottom: 6px; }
 #voice-recording-overlay .overlay-hint { font-size: 12px; color: rgba(255,255,255,.7); margin-top: 4px; }
+.voice-bubble { user-select: none; -webkit-user-select: none; }
+.voice-bubble:active { opacity: .75; }
+.voice-bubble .vb-icon { margin-right: 4px; }
 #voice-recording-overlay .overlay-wave { display: flex; align-items: center; justify-content: center; gap: 3px; height: 44px; margin-bottom: 6px; }
 #voice-recording-overlay .overlay-wave span { width: 4px; height: 4px; border-radius: 2px; background: #4ade80; transition: height .06s linear; }
 .msg-audio { margin-top: 5px; }
@@ -456,7 +459,9 @@ body.is-mobile .row .field   { width: 100%; }
       <div class="field"><label>手机号</label><input type="tel" id="l-phone" placeholder="13800000000"></div>
       <div class="field"><label>密码</label><input type="password" id="l-pwd" placeholder="请输入密码"></div>
       <button class="btn btn-primary btn-full" onclick="doLogin()">登录</button>
+      <button class="btn btn-secondary btn-full" style="margin-top:10px" onclick="enterGuestMode()">游客进入</button>
       <p class="auth-toggle" style="color:var(--text-3)">普通用户请使用微信小程序注册登录</p>
+      <p style="text-align:center;font-size:11px;color:var(--text-3);margin-top:14px">build <span class="ss-build-text"></span></p>
     </div>
   </div>
 </div>
@@ -467,7 +472,7 @@ body.is-mobile .row .field   { width: 100%; }
   <div id="sidebar">
     <div class="sidebar-brand">
       <h1>替身</h1>
-      <p>Shuangshen v0.3</p>
+      <p>Shuangshen v0.3 · <span class="ss-build-text"></span></p>
     </div>
     <div class="sidebar-user">
       <div class="avatar-sm" id="user-initials">?</div>
@@ -1412,11 +1417,35 @@ window.onload = () => {
     showApp();
     showPage('avatars');
     loadAvatars();
+  } else if (sessionStorage.getItem('ss_guest') === '1') {
+    enterGuestMode();
   } else {
     showAuth();
     showLogin();
   }
+
+  // 渲染构建版本号（登录页 + 侧边栏小字）
+  document.querySelectorAll('.ss-build-text').forEach(el => { el.textContent = SS_BUILD; });
 };
+
+// ─── 游客模式 ─────────────────────────────────
+// 未登录可浏览界面（符合小程序审核规范），进一步操作提示登录
+function enterGuestMode() {
+  sessionStorage.setItem('ss_guest', '1');
+  currentUser = null; token = null;
+  showApp();
+  showPage('avatars');
+  loadAvatars();
+}
+
+// 需要登录的操作统一走这里拦截
+function requireLogin() {
+  if (token) return true;
+  toast('请先登录后使用此功能', 'error');
+  sessionStorage.removeItem('ss_guest');
+  setTimeout(() => { showAuth(); showLogin(); }, 800);
+  return false;
+}
 
 function showAuth() {
   document.getElementById('auth-wrap').style.display = 'flex';
@@ -1428,6 +1457,10 @@ function showApp() {
   if (currentUser) {
     document.getElementById('user-name-display').textContent = currentUser.display_name;
     document.getElementById('user-initials').textContent = currentUser.display_name?.[0] || '?';
+  } else {
+    // 游客模式
+    document.getElementById('user-name-display').textContent = '游客';
+    document.getElementById('user-initials').textContent = '客';
   }
   loadCoinBalance();
 }
@@ -1459,6 +1492,7 @@ function saveAuth(res) {
 function doLogout() {
   localStorage.removeItem('ss_token');
   localStorage.removeItem('ss_user');
+  sessionStorage.removeItem('ss_guest');
   token = null; currentUser = null; currentAvatar = null;
   showAuth(); showLogin();
 }
@@ -1697,6 +1731,7 @@ function onRelChange() {
 }
 
 async function doCreateAvatar() {
+  if (!requireLogin()) return;
   const name = v('new-avatar-name');
   const rel = v('new-avatar-rel');
   const identity_desc = v('new-avatar-desc').trim();
@@ -1787,10 +1822,11 @@ async function doUnbindAvatarById(avatarId, name) {
 }
 
 async function doJoin() {
+  if (!requireLogin()) return;
   const code = v('join-code').trim();
   if (!code) return toast('请输入共享码', 'error');
   const res = await api('POST', '/api/avatars/join/' + code);
-  if (res.avatar_id || res.message) {
+  if (res && (res.avatar_id || res.message)) {
     toast(res.message || '绑定成功', 'success');
     document.getElementById('join-code').value = '';
     loadReceived();
@@ -1812,9 +1848,9 @@ function _writeChatCache(avatarId, msgs) {
     localStorage.setItem(_chatCacheKey(avatarId), JSON.stringify(trimmed));
   } catch {}
 }
-function _appendChatCache(avatarId, role, content) {
+function _appendChatCache(avatarId, role, content, extra) {
   const cached = _readChatCache(avatarId) || [];
-  cached.push({ role, content });
+  cached.push({ role, content, ...(extra || {}) });
   _writeChatCache(avatarId, cached);
 }
 
@@ -1822,7 +1858,13 @@ function _renderMessages(msgs) {
   const box = document.getElementById('chat-messages');
   box.innerHTML = '';
   if (msgs && msgs.length > 0) {
-    msgs.forEach(m => appendMsg(m.role, m.content, false));
+    msgs.forEach(m => {
+      if (m.msg_type === 'voice' && m.role === 'user') {
+        appendVoiceMsg('user', m.duration || 0, { msgId: m.id }, false);
+      } else {
+        appendMsg(m.role, m.content, false);
+      }
+    });
   } else {
     box.innerHTML = '<div class="empty" style="margin-top:60px"><p>发送第一条消息，开始对话吧</p></div>';
   }
@@ -1854,6 +1896,7 @@ async function loadChatHistory() {
 }
 
 async function sendMessage() {
+  if (!requireLogin()) return;
   const input = document.getElementById('chat-input');
   const text = input.value.trim();
   if (!text || !currentAvatar) return;
@@ -1899,8 +1942,9 @@ function appendMsg(role, content, animate, intercepted) {
   const bubbleHtml = `${esc(renderEmoji(content)).replace(/\n/g,'<br>')}${intercepted ? '<span class="intercept-badge">已拦截</span>' : ''}`;
   const aiBadge = isUser ? '' : '<span style="display:block;font-size:10px;color:var(--text-3);margin-top:3px;text-align:right">AI 生成</span>';
 
-  // TTS 控件只在 bot 消息且替身有声音克隆时显示
-  const voiceCtrl = (!isUser && _avatarHasVoice)
+  // TTS 控件：所有 bot 消息都显示小喇叭
+  // 有克隆声音→模仿本人音色；无克隆声音→标准普通话（后端自动降级）
+  const voiceCtrl = !isUser
     ? `<div class="msg-audio" id="audio-wrap-${idx}" style="display:none"><audio id="audio-${idx}" controls></audio></div><span class="msg-voice-toggle" data-idx="${idx}">🔊 点击播放语音</span>`
     : aiBadge;
 
@@ -1915,13 +1959,89 @@ function appendMsg(role, content, animate, intercepted) {
   box.appendChild(div);
 
   // 绑定 toggle 事件（按需加载：用户点击喇叭才合成语音）
-  if (!isUser && _avatarHasVoice) {
+  if (!isUser) {
     const toggleEl = div.querySelector('.msg-voice-toggle');
     if (toggleEl) toggleEl.addEventListener('click', () => toggleMsgVoice(idx, content));
     _msgVoiceMode[idx] = 'text';  // 默认文字模式，不自动调用TTS
   }
 
   scrollBottom();
+}
+
+// ─── 语音消息气泡 ─────────────────────────────
+// meta: { localUrl?: 本地blob（刚录完可立即播）, msgId?: 服务端消息id（历史重播时按需拉取） }
+const _voiceMsgMeta = {};
+let _voicePlayingIdx = null;
+const _voicePlayer = new Audio();
+_voicePlayer.addEventListener('ended', () => {
+  if (_voicePlayingIdx != null) _setVoiceBubblePlaying(_voicePlayingIdx, false);
+  _voicePlayingIdx = null;
+});
+
+function appendVoiceMsg(role, duration, meta, animate) {
+  const box = document.getElementById('chat-messages');
+  const isUser = role === 'user';
+  const div = document.createElement('div');
+  div.className = 'msg ' + (isUser ? 'user' : 'bot');
+  const initials = isUser ? (currentUser?.display_name?.[0] || '我') : (currentAvatar?.name?.[0] || '?');
+  const idx = _msgIdx++;
+  div.dataset.msgIdx = idx;
+  _voiceMsgMeta[idx] = meta || {};
+
+  // 气泡宽度随时长增加（仿微信），10s 封顶
+  const w = 90 + Math.min(10, duration) * 10;
+  div.innerHTML = `
+    <div class="msg-avatar">${initials}</div>
+    <div>
+      <div class="msg-bubble voice-bubble" id="voice-bubble-${idx}" style="min-width:${w}px;cursor:pointer" onclick="_playVoiceMsg(${idx})">
+        <span class="vb-icon" id="vb-icon-${idx}">🔊</span> ${duration}″
+      </div>
+    </div>`;
+  if (animate) div.style.animation = 'none';
+  box.appendChild(div);
+  scrollBottom();
+  return idx;
+}
+
+function _setVoiceBubblePlaying(idx, playing) {
+  const icon = document.getElementById('vb-icon-' + idx);
+  if (icon) icon.textContent = playing ? '▶️' : '🔊';
+}
+
+function _markVoiceMsgFailed(idx) {
+  const bubble = document.getElementById('voice-bubble-' + idx);
+  if (bubble) { bubble.style.opacity = '.5'; bubble.innerHTML += ' <span style="color:#dc2626">⚠️ 发送失败</span>'; }
+}
+
+async function _playVoiceMsg(idx) {
+  // 再点一次正在播的气泡 → 停止
+  if (_voicePlayingIdx === idx) {
+    _voicePlayer.pause(); _voicePlayer.currentTime = 0;
+    _setVoiceBubblePlaying(idx, false);
+    _voicePlayingIdx = null;
+    return;
+  }
+  if (_voicePlayingIdx != null) _setVoiceBubblePlaying(_voicePlayingIdx, false);
+
+  const meta = _voiceMsgMeta[idx] || {};
+  let url = meta.localUrl;
+  if (!url && meta.msgId && currentAvatar) {
+    // 历史消息：带鉴权拉取音频并缓存
+    try {
+      const resp = await fetch(API + `/api/chat/${currentAvatar.id}/audio/${meta.msgId}`, {
+        headers: { Authorization: 'Bearer ' + token },
+      });
+      if (!resp.ok) throw new Error();
+      url = URL.createObjectURL(await resp.blob());
+      meta.localUrl = url;
+    } catch (e) { toast('语音加载失败', 'error'); return; }
+  }
+  if (!url) { toast('语音不可用', 'error'); return; }
+
+  _voicePlayer.src = url;
+  _voicePlayer.play().catch(() => toast('播放失败', 'error'));
+  _voicePlayingIdx = idx;
+  _setVoiceBubblePlaying(idx, true);
 }
 
 let typingEl = null;
@@ -2559,6 +2679,8 @@ async function doSaveIdentity() {
 
 // ─── API helper ──────────────────────────────
 async function api(method, path, body) {
+  // 游客模式：除登录/注册接口外不发请求，静默返回（页面展示空状态）
+  if (!token && !path.startsWith('/api/auth')) return null;
   try {
     const opts = {
       method,
@@ -2673,6 +2795,7 @@ async function loadCoinBalance() {
 // ─── 购买言己币 ───────────────────────────────
 let _packages = null;
 async function showPurchaseModal() {
+  if (!requireLogin()) return;
   document.getElementById('purchase-modal').style.display = 'flex';
   // 刷新邀请码 + 今日分享次数
   const refEl = document.getElementById('my-referral-code');
@@ -3141,6 +3264,7 @@ function toggleVoiceInputMode() {
     modeBtn.classList.remove('active');
     modeBtn.title = '切换语音输入';
     if (hint) hint.textContent = 'Enter 发送 · Shift+Enter 换行';
+    _sttReleaseStream();   // 退出语音模式，释放麦克风
   }
 }
 
@@ -3211,6 +3335,19 @@ function _sttStopWave() {
 
 // 开始录音
 let _sttPendingStop = false;  // 记录用户在 getUserMedia 完成前已经松手
+let _sttStream = null;        // 缓存麦克风流：一次授权，语音模式期间复用
+
+function _sttReleaseStream() {
+  if (_sttStream) {
+    try { _sttStream.getTracks().forEach(t => t.stop()); } catch (e) {}
+    _sttStream = null;
+  }
+}
+// 页面隐藏时释放麦克风（不让指示灯常亮）
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && !_sttIsRecording) _sttReleaseStream();
+});
+
 async function _sttBeginRecord() {
   if (_sttIsRecording) return;
   if (!navigator.mediaDevices?.getUserMedia) {
@@ -3218,10 +3355,15 @@ async function _sttBeginRecord() {
   }
   _sttPendingStop = false;
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    // 复用已授权的流，避免每次按住都弹权限框
+    let stream = _sttStream;
+    if (!stream || !stream.active) {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      _sttStream = stream;
+    }
 
-    // 若 getUserMedia 未返回前用户已松手，直接丢弃
-    if (_sttPendingStop) { stream.getTracks().forEach(t => t.stop()); return; }
+    // 若 getUserMedia 未返回前用户已松手：保留流（下次直接用），本次不启动
+    if (_sttPendingStop) return;
 
     _sttAudioChunks = [];
     _sttCancelled = false;
@@ -3234,14 +3376,14 @@ async function _sttBeginRecord() {
 
     _sttMediaRecorder.ondataavailable = e => { if (e.data.size > 0) _sttAudioChunks.push(e.data); };
     _sttMediaRecorder.onstop = () => {
-      // 停完再释放轨道，防止 dataavailable 丢包
-      stream.getTracks().forEach(t => t.stop());
+      // 不停止轨道 —— 流保留复用，无需反复授权
       if (!_sttCancelled) _sttHandleStop();
     };
 
     // timeslice=200ms：每 200ms 触发一次 dataavailable，防止短录音丢数据
     _sttMediaRecorder.start(200);
     _sttIsRecording = true;
+    _sttRecStartMs = Date.now();
 
     const holdBtn = document.getElementById('hold-to-speak-btn');
     if (holdBtn) { holdBtn.classList.add('pressing'); holdBtn.textContent = '🔴 松开发送'; }
@@ -3319,35 +3461,105 @@ function _sttStopMedia(cancel) {
   if (holdBtn) { holdBtn.classList.remove('pressing','cancel-zone'); holdBtn.textContent = '🎙️ 按住说话'; }
 }
 
-// 录音停止后识别
+// ─── webm/opus → WAV 16k 单声道 ───
+// 腾讯 ASR 不支持 webm 容器（只支持 wav/mp3/ogg-opus/m4a 等），
+// 浏览器 MediaRecorder 录出的是 webm，必须先转码，否则识别永远为空。
+async function _sttBlobToWav(blob) {
+  const arrayBuf = await blob.arrayBuffer();
+  const AC = window.AudioContext || window.webkitAudioContext;
+  const ctx = new AC();
+  let decoded;
+  try {
+    decoded = await new Promise((res, rej) => {
+      // 回调式写法兼容老 Safari/WebView
+      const p = ctx.decodeAudioData(arrayBuf, res, rej);
+      if (p && p.then) p.then(res).catch(rej);
+    });
+  } finally {
+    try { ctx.close(); } catch (e) {}
+  }
+  // 重采样到 16kHz 单声道（多声道自动混音）
+  const rate = 16000;
+  const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+  const off = new OAC(1, Math.max(1, Math.ceil(decoded.duration * rate)), rate);
+  const src = off.createBufferSource();
+  src.buffer = decoded;
+  src.connect(off.destination);
+  src.start();
+  const rendered = await off.startRendering();
+  const pcm = rendered.getChannelData(0);
+
+  // PCM16 WAV 编码
+  const buf = new ArrayBuffer(44 + pcm.length * 2);
+  const dv = new DataView(buf);
+  const wstr = (o, s) => { for (let i = 0; i < s.length; i++) dv.setUint8(o + i, s.charCodeAt(i)); };
+  wstr(0, 'RIFF'); dv.setUint32(4, 36 + pcm.length * 2, true); wstr(8, 'WAVE');
+  wstr(12, 'fmt '); dv.setUint32(16, 16, true); dv.setUint16(20, 1, true);
+  dv.setUint16(22, 1, true); dv.setUint32(24, rate, true);
+  dv.setUint32(28, rate * 2, true); dv.setUint16(32, 2, true); dv.setUint16(34, 16, true);
+  wstr(36, 'data'); dv.setUint32(40, pcm.length * 2, true);
+  for (let i = 0; i < pcm.length; i++) {
+    const s = Math.max(-1, Math.min(1, pcm[i]));
+    dv.setInt16(44 + i * 2, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+  }
+  return new Blob([buf], { type: 'audio/wav' });
+}
+
+// 录音停止 → 语音即消息：气泡立即显示（可重播），后台 ASR 转文字驱动 AI 回复
+let _sttRecStartMs = 0;
 async function _sttHandleStop() {
   const mime = _sttGetMime();
-  const blob = new Blob(_sttAudioChunks, { type: mime });
-  if (blob.size < 500) { toast('录音太短，请重试', 'error'); return; }
+  const rawBlob = new Blob(_sttAudioChunks, { type: mime });
+  if (rawBlob.size < 500) { toast('录音太短，请重试', 'error'); return; }
+  if (!requireLogin() || !currentAvatar) return;
+  const avatarId = currentAvatar.id;
+  const durationSec = Math.max(1, Math.round((Date.now() - _sttRecStartMs) / 1000));
 
-  toast('识别中…', 'info');
+  // 转 WAV（腾讯 ASR 不认 webm）；转码失败则回退原始格式
+  let blob = rawBlob, fname = 'recording.' + (mime.includes('webm') ? 'webm' : 'mp4');
+  try {
+    blob = await _sttBlobToWav(rawBlob);
+    fname = 'recording.wav';
+  } catch (e) {
+    console.warn('WAV 转码失败，回退原始格式:', e);
+  }
+
+  // 乐观渲染：语音气泡立即上屏，本地 blob 可立即重播
+  const empty = document.querySelector('#chat-messages .empty');
+  if (empty) empty.remove();
+  const localUrl = URL.createObjectURL(blob);
+  const idx = appendVoiceMsg('user', durationSec, { localUrl }, true);
+  showTyping();
+
   const formData = new FormData();
-  formData.append('audio', blob, 'recording.' + (mime.includes('webm') ? 'webm' : 'mp4'));
-  formData.append('language', 'zh');
+  formData.append('audio', blob, fname);
+  formData.append('duration', durationSec);
 
   try {
-    const resp = await fetch(API + '/api/media/stt', {
+    const resp = await fetch(API + '/api/chat/' + avatarId + '/voice', {
       method: 'POST',
       headers: { Authorization: 'Bearer ' + token },
       body: formData,
     });
     const data = await resp.json();
-    if (!resp.ok) throw new Error(data.error || '识别失败');
-    if (data.text) {
-      // 识别完成 → 自动发送
-      const chatInput = document.getElementById('chat-input');
-      chatInput.value = data.text.trim();
-      sendMessage();
-    } else {
-      toast('未识别到语音，请重试', 'error');
+    hideTyping();
+    if (!resp.ok) throw new Error(data.error || '发送失败');
+
+    // 关联服务端消息 id（重播/历史加载用）
+    if (data.user_msg_id) _voiceMsgMeta[idx] = { ..._voiceMsgMeta[idx], msgId: data.user_msg_id };
+    _appendChatCache(avatarId, 'user', '[语音] ' + (data.recognized_text || ''),
+                     { msg_type: 'voice', id: data.user_msg_id, duration: durationSec });
+
+    if (data.takeover) {
+      startReceiverTakeoverPoll(avatarId);
+    } else if (data.reply) {
+      appendMsg('assistant', data.reply, true, data.intercepted);
+      _appendChatCache(avatarId, 'assistant', data.reply);
     }
   } catch (e) {
-    toast('语音识别失败：' + e.message, 'error');
+    hideTyping();
+    _markVoiceMsgFailed(idx);
+    toast('语音发送失败：' + e.message, 'error');
   }
 }
 

@@ -101,7 +101,14 @@ def tts_endpoint(avatar_id):
     try:
         audio_bytes = tts_synthesize(text, voice_id=voice_id, language=language)
     except RuntimeError as e:
-        return jsonify({"error": str(e)}), 503
+        # 克隆音色失败（如训练未完成）→ 自动降级为标准普通话音色
+        if voice_id:
+            try:
+                audio_bytes = tts_synthesize(text, voice_id=None, language=language)
+            except RuntimeError as e2:
+                return jsonify({"error": str(e2)}), 503
+        else:
+            return jsonify({"error": str(e)}), 503
 
     return Response(audio_bytes, mimetype="audio/mpeg")
 
