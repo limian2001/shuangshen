@@ -3,7 +3,8 @@
 ───────────────────────────────────────────── */
 
 .landing {
-  min-height: 100vh;
+  /* scroll-view 必须是固定高度才能滚动（min-height 会被内容撑开，滚动失效） */
+  height: 100vh;
   background: #f7f6f3;
 }
 

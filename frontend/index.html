@@ -2,8 +2,8 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="ss-build" content="20260716-5">
-<script>const SS_BUILD = '20260716-5'; console.log('ss-build: ' + SS_BUILD);</script>
+<meta name="ss-build" content="20260716-6">
+<script>const SS_BUILD = '20260716-6'; console.log('ss-build: ' + SS_BUILD);</script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>替身 · Shuangshen</title>
 <style>
@@ -65,7 +65,29 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; b
 .sidebar-bottom { margin-top: auto; padding: 12px 10px; border-top: 1px solid var(--border); }
 
 /* ── Auth pages ── */
-#auth-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: var(--bg); }
+#auth-wrap { min-height: 100vh; overflow-y: auto; background: var(--bg); }
+/* ── 落地页（与小程序首页同款要素：Hero + 示例对话 + 功能卡片 + 登录） ── */
+.lp-hero { background: linear-gradient(160deg, #5b51c9 0%, #534AB7 55%, #4a41a8 100%); color: #fff; text-align: center; padding: 64px 24px 56px; }
+.lp-logo { font-size: 40px; font-weight: 800; letter-spacing: 4px; margin-bottom: 18px; }
+.lp-title { font-size: 26px; font-weight: 700; margin-bottom: 10px; }
+.lp-sub { font-size: 14px; opacity: .82; }
+.lp-body { max-width: 860px; margin: 0 auto; padding: 0 20px 60px; }
+.lp-demo-label { text-align: center; font-size: 13px; color: var(--text-3); margin: 32px 0 14px; }
+.lp-demo { background: #fff; border: 1px solid var(--border); border-radius: 16px; padding: 22px 20px; box-shadow: 0 2px 12px rgba(0,0,0,.04); max-width: 560px; margin: 0 auto; }
+.lp-brow { display: flex; margin-bottom: 12px; align-items: flex-end; gap: 8px; }
+.lp-brow.right { justify-content: flex-end; }
+.lp-bubble { max-width: 78%; padding: 10px 14px; border-radius: 14px; font-size: 14px; line-height: 1.55; }
+.lp-bubble-user { background: #534AB7; color: #fff; border-bottom-right-radius: 4px; }
+.lp-bubble-ai { background: var(--purple-light, #edebfa); color: var(--text, #333); border-bottom-left-radius: 4px; }
+.lp-avatar-dot { width: 30px; height: 30px; border-radius: 50%; background: #534AB7; color: #fff; font-size: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.lp-features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin: 36px auto 0; max-width: 860px; }
+@media (max-width: 720px) { .lp-features { grid-template-columns: 1fr; max-width: 560px; } }
+.lp-feature { background: #fff; border: 1px solid var(--border); border-radius: 14px; padding: 18px 16px; display: flex; gap: 12px; align-items: flex-start; }
+.lp-feature-icon { font-size: 26px; line-height: 1; }
+.lp-feature-title { font-weight: 700; font-size: 15px; margin-bottom: 4px; }
+.lp-feature-desc { font-size: 12.5px; color: var(--text-3); line-height: 1.5; }
+.lp-login-wrap { display: flex; justify-content: center; margin-top: 40px; }
+.lp-footer { text-align: center; font-size: 12px; color: var(--text-3); padding: 28px 0 10px; }
 .auth-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 36px 32px; width: 380px; box-shadow: var(--shadow); }
 .auth-card h2 { font-size: 20px; font-weight: 600; color: var(--purple); margin-bottom: 6px; }
 .auth-card p { font-size: 13px; color: var(--text-2); margin-bottom: 24px; }
@@ -452,17 +474,77 @@ body.is-mobile .row .field   { width: 100%; }
 
 <!-- Auth -->
 <div id="auth-wrap" style="display:none">
-  <div class="auth-card">
-    <h2 id="auth-title">欢迎回来</h2>
-    <p id="auth-sub">登录你的替身账号</p>
-    <div id="login-form">
-      <div class="field"><label>手机号</label><input type="tel" id="l-phone" placeholder="13800000000"></div>
-      <div class="field"><label>密码</label><input type="password" id="l-pwd" placeholder="请输入密码"></div>
-      <button class="btn btn-primary btn-full" onclick="doLogin()">登录</button>
-      <button class="btn btn-secondary btn-full" style="margin-top:10px" onclick="enterGuestMode()">游客进入</button>
-      <p class="auth-toggle" style="color:var(--text-3)">普通用户请使用微信小程序注册登录</p>
-      <p style="text-align:center;font-size:11px;color:var(--text-3);margin-top:14px">build <span class="ss-build-text"></span></p>
+
+  <!-- Hero 区域 -->
+  <div class="lp-hero">
+    <div class="lp-logo">言己</div>
+    <div class="lp-title">用 AI 重现你珍视的人</div>
+    <div class="lp-sub">音色 · 记忆 · 说话方式，一一还原</div>
+  </div>
+
+  <div class="lp-body">
+
+    <!-- 示例对话 -->
+    <div class="lp-demo-label">✦ 就像这样对话</div>
+    <div class="lp-demo">
+      <div class="lp-brow right">
+        <div class="lp-bubble lp-bubble-user">妈，我今天工作不顺利，好累……</div>
+      </div>
+      <div class="lp-brow">
+        <div class="lp-avatar-dot">妈</div>
+        <div class="lp-bubble lp-bubble-ai">宝贝，累了就好好休息。你从小就比别人努力，妈心里都看见的。</div>
+      </div>
+      <div class="lp-brow right">
+        <div class="lp-bubble lp-bubble-user">要是你还在就好了……</div>
+      </div>
+      <div class="lp-brow">
+        <div class="lp-avatar-dot">妈</div>
+        <div class="lp-bubble lp-bubble-ai">妈一直都在。只要你想我，就来这里说说话。</div>
+      </div>
     </div>
+
+    <!-- 功能亮点 -->
+    <div class="lp-features">
+      <div class="lp-feature">
+        <span class="lp-feature-icon">🎙️</span>
+        <div>
+          <div class="lp-feature-title">声音复刻</div>
+          <div class="lp-feature-desc">上传音频，AI 还原ta独有的音色</div>
+        </div>
+      </div>
+      <div class="lp-feature">
+        <span class="lp-feature-icon">💬</span>
+        <div>
+          <div class="lp-feature-title">性格记忆</div>
+          <div class="lp-feature-desc">导入聊天记录，学习ta的说话方式</div>
+        </div>
+      </div>
+      <div class="lp-feature">
+        <span class="lp-feature-icon">📸</span>
+        <div>
+          <div class="lp-feature-title">照片故事</div>
+          <div class="lp-feature-desc">用照片和文字丰富 AI 的长期记忆</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 登录卡片 -->
+    <div class="lp-login-wrap">
+      <div class="auth-card">
+        <h2 id="auth-title">欢迎回来</h2>
+        <p id="auth-sub">登录你的替身账号</p>
+        <div id="login-form">
+          <div class="field"><label>手机号</label><input type="tel" id="l-phone" placeholder="13800000000"></div>
+          <div class="field"><label>密码</label><input type="password" id="l-pwd" placeholder="请输入密码"></div>
+          <button class="btn btn-primary btn-full" onclick="doLogin()">登录</button>
+          <button class="btn btn-secondary btn-full" style="margin-top:10px" onclick="enterGuestMode()">游客进入，先逛逛</button>
+          <p class="auth-toggle" style="color:var(--text-3)">普通用户请使用微信小程序注册登录</p>
+          <p style="text-align:center;font-size:11px;color:var(--text-3);margin-top:14px">build <span class="ss-build-text"></span></p>
+        </div>
+      </div>
+    </div>
+
+    <div class="lp-footer">言己 — 让思念有处安放</div>
   </div>
 </div>
 
@@ -1457,7 +1539,7 @@ function requireLogin() {
 }
 
 function showAuth() {
-  document.getElementById('auth-wrap').style.display = 'flex';
+  document.getElementById('auth-wrap').style.display = 'block';
   document.getElementById('app').style.display = 'none';
 }
 function showApp() {
