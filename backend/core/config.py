@@ -40,6 +40,8 @@ class Config:
     CLOUDBASE_API_KEY: str     = os.getenv("CLOUDBASE_API_KEY", "")
     CLOUDBASE_MODEL: str       = os.getenv("CLOUDBASE_MODEL", "deepseek-v4-flash")
     CLOUDBASE_EMBED_MODEL: str = os.getenv("CLOUDBASE_EMBED_MODEL", "hunyuan-embedding")
+    # embedding 模型不在 cloudbase 分组里，需走 hunyuan provider（同网关换路径段）
+    CLOUDBASE_EMBED_PROVIDER: str = os.getenv("CLOUDBASE_EMBED_PROVIDER", "hunyuan")
 
     # RAG 检索配置
     RAG_TOP_K: int = int(os.getenv("RAG_TOP_K", 6))

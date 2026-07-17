@@ -193,12 +193,16 @@ class LLMProvider:
     def _embed_request(self, inputs: List[str]) -> list:
         """
         调用 CloudBase 混元 embedding（OpenAI 兼容 /embeddings）。
+        注意：embedding 模型挂在 hunyuan provider 下，不在 cloudbase 分组，
+        需把 base_url 末段的 provider 替换掉。
         返回 API 的 data 数组；失败抛异常。
         """
+        import re as _re
         base = config.CLOUDBASE_BASE_URL.rstrip("/")
         key  = config.CLOUDBASE_API_KEY
         if not base or not key:
             raise RuntimeError("CloudBase 未配置（CLOUDBASE_BASE_URL / CLOUDBASE_API_KEY）")
+        base = _re.sub(r'/v1/ai/[^/]+$', f'/v1/ai/{config.CLOUDBASE_EMBED_PROVIDER}', base)
         payload = json.dumps({
             "model": config.CLOUDBASE_EMBED_MODEL,
             "input": [t[:2000] for t in inputs],
