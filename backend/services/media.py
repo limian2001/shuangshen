@@ -321,12 +321,15 @@ VOLC_ICL_TTS_URL = "https://openspeech.bytedance.com/api/v1/tts"
 
 def _tts_icl_http(text: str, voice_id: str, api_key: str, speed_ratio: float) -> bytes:
     """
-    声音复刻合成（ICL HTTP 接口）。
-    voice_id 是声音克隆训练后的 speaker_id，cluster 固定为 volcano_icl。
+    声音复刻合成（V1 HTTP 接口，/api/v1/tts）。
+    voice_id 是声音克隆训练后的 speaker_id（S_ 开头），cluster 固定为 volcano_icl。
+    认证与克隆上传同族：Bearer;AccessToken（不是 V3 的 x-api-key）。
     """
+    token   = _clone_token()
+    app_id  = config.VOLC_APP_ID
     req_id  = _rand_id()
     payload = json.dumps({
-        "app":  {"cluster": "volcano_icl"},
+        "app":  {"appid": app_id, "token": token, "cluster": "volcano_icl"},
         "user": {"uid": req_id[:16]},
         "audio": {
             "voice_type":  voice_id,
@@ -343,7 +346,10 @@ def _tts_icl_http(text: str, voice_id: str, api_key: str, speed_ratio: float) ->
     req = urllib.request.Request(
         VOLC_ICL_TTS_URL,
         data=payload,
-        headers={"x-api-key": api_key, "Content-Type": "application/json"},
+        headers={
+            "Authorization": f"Bearer;{token}",
+            "Content-Type":  "application/json",
+        },
         method="POST",
     )
     try:
