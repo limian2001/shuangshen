@@ -39,9 +39,12 @@ class Config:
     CLOUDBASE_BASE_URL: str    = os.getenv("CLOUDBASE_BASE_URL", "")   # https://<env>.api.tcloudbasegateway.com/v1/ai/cloudbase
     CLOUDBASE_API_KEY: str     = os.getenv("CLOUDBASE_API_KEY", "")
     CLOUDBASE_MODEL: str       = os.getenv("CLOUDBASE_MODEL", "deepseek-v4-flash")
-    CLOUDBASE_EMBED_MODEL: str = os.getenv("CLOUDBASE_EMBED_MODEL", "hunyuan-embedding")
-    # embedding 模型不在 cloudbase 分组里，需走 hunyuan provider（同网关换路径段）
-    CLOUDBASE_EMBED_PROVIDER: str = os.getenv("CLOUDBASE_EMBED_PROVIDER", "hunyuan")
+
+    # Embedding 服务（腾讯混元官方 API — CloudBase 网关不含 embedding 模型）
+    # API Key 在 console.cloud.tencent.com/hunyuan/api-key 创建
+    EMBED_BASE_URL: str = os.getenv("EMBED_BASE_URL", "https://api.hunyuan.cloud.tencent.com/v1")
+    EMBED_API_KEY: str  = os.getenv("EMBED_API_KEY", "")
+    EMBED_MODEL: str    = os.getenv("EMBED_MODEL", "hunyuan-embedding")
 
     # RAG 检索配置
     RAG_TOP_K: int = int(os.getenv("RAG_TOP_K", 6))

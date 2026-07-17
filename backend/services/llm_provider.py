@@ -201,55 +201,35 @@ class LLMProvider:
             raise
 
     # ─── DeepSeek Embedding ──────────────────────────────────────
-    _embed_url_winner: Optional[str] = None   # 首个成功的 embedding URL，缓存直达
-
     def _embed_request(self, inputs: List[str]) -> list:
         """
-        调用 CloudBase 混元 embedding（OpenAI 兼容）。
-        embedding 挂在 hunyuan provider 下，且新老路径格式不同
-        （…/v1/ai/hunyuan/v1/embeddings 或 …/v1/ai/hunyuan/embeddings），
-        逐个尝试，成功后缓存 URL。
-        返回 API 的 data 数组；全部失败抛异常。
+        腾讯混元官方 embedding（OpenAI 兼容 /embeddings，1024 维）。
+        注：CloudBase 资源点网关不含 embedding 模型（已实测+文档确认），
+        故直连混元 API，需单独的 EMBED_API_KEY。
+        返回 API 的 data 数组；失败抛异常。
         """
-        import re as _re
-        base = config.CLOUDBASE_BASE_URL.rstrip("/")
-        key  = config.CLOUDBASE_API_KEY
-        if not base or not key:
-            raise RuntimeError("CloudBase 未配置（CLOUDBASE_BASE_URL / CLOUDBASE_API_KEY）")
-
-        env_base = _re.sub(r'/v1/ai/[^/]+$', '', base)   # 去掉 provider 段
-        prov = config.CLOUDBASE_EMBED_PROVIDER
-        candidates = ([LLMProvider._embed_url_winner] if LLMProvider._embed_url_winner else [
-            f"{env_base}/v1/ai/{prov}/v1/embeddings",   # 老格式（provider 后多一层 /v1）
-            f"{env_base}/v1/ai/{prov}/embeddings",      # 新格式
-            f"{base}/embeddings",                        # cloudbase 分组兜底
-        ])
-
+        key = config.EMBED_API_KEY
+        if not key:
+            raise RuntimeError(
+                "EMBED_API_KEY 未配置：请在 console.cloud.tencent.com/hunyuan/api-key "
+                "创建 API Key 并填入 .env"
+            )
         payload = json.dumps({
-            "model": config.CLOUDBASE_EMBED_MODEL,
+            "model": config.EMBED_MODEL,
             "input": [t[:2000] for t in inputs],
         }).encode()
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {key}",
-        }
-
-        errors = []
-        for url in candidates:
-            req = urllib.request.Request(url, data=payload, headers=headers, method="POST")
-            try:
-                with urllib.request.urlopen(req, timeout=60) as resp:
-                    data = json.loads(resp.read())
-                if LLMProvider._embed_url_winner != url:
-                    LLMProvider._embed_url_winner = url
-                    print(f"[LLM] embedding 路径确定: {url}")
-                return data.get("data", [])
-            except urllib.error.HTTPError as e:
-                errors.append(f"[{url}] {e.code}: {e.read().decode('utf-8', errors='replace')[:120]}")
-            except Exception as e:
-                errors.append(f"[{url}] {e}")
-        LLMProvider._embed_url_winner = None
-        raise RuntimeError("embedding 全部路径失败:\n" + "\n".join(errors))
+        req = urllib.request.Request(
+            f"{config.EMBED_BASE_URL.rstrip('/')}/embeddings",
+            data=payload,
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {key}",
+            },
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            data = json.loads(resp.read())
+        return data.get("data", [])
 
     def embed(self, text: str) -> Optional[List[float]]:
         """
