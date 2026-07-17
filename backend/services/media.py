@@ -197,7 +197,7 @@ def _build_ws_msg(event: int, payload: bytes, session_id: str = "") -> bytes:
 def _parse_ws_msg(data: bytes):
     """解析服务端帧，返回 (msg_type, event, audio_bytes_or_None)"""
     if len(data) < 4:
-        return 0, None, None
+        return 0, None, None, b""
     mt   = (data[1] >> 4) & 0x0F   # msg_type: 9=FullServerResponse, 11=AudioOnlyServer, 15=Error
     flag = data[1] & 0x0F           # 1=PositiveSeq, 2=LastNoSeq, 3=NegativeSeq, 4=WithEvent
     off  = 4
@@ -205,7 +205,7 @@ def _parse_ws_msg(data: bytes):
     event = None
     if flag == 4:   # WithEvent
         if off + 4 > len(data):
-            return mt, None, None
+            return mt, None, None, b""
         event = struct.unpack(">i", data[off:off + 4])[0]
         off += 4
         if event not in _CONN_EVENTS:
@@ -228,12 +228,13 @@ def _parse_ws_msg(data: bytes):
             payload = data[off:off + plen]
 
     audio = payload if mt == 11 and payload else None
-    return mt, event, audio
+    return mt, event, audio, payload
 
 
 async def _tts_ws_async(text: str, speaker: str, speed_ratio: float,
-                        api_key: str) -> bytes:
-    """seed-tts-2.0 WebSocket 双向流 TTS，返回 MP3 字节"""
+                        api_key: str, resource_id: str = "seed-tts-2.0") -> bytes:
+    """V3 WebSocket 双向流 TTS，返回 MP3 字节。
+    resource_id: seed-tts-2.0(默认音色) / seed-icl-2.0 / seed-icl-1.0(克隆音色)"""
     try:
         import websockets
     except ImportError:
@@ -247,7 +248,7 @@ async def _tts_ws_async(text: str, speaker: str, speed_ratio: float,
     # 正确的认证头：X-Api-Key（不是 X-Api-Access-Key，也不需要 X-Api-App-Id）
     headers = {
         "X-Api-Key":         api_key,
-        "X-Api-Resource-Id": "seed-tts-2.0",
+        "X-Api-Resource-Id": resource_id,
         "X-Api-Connect-Id":  _rand_id(),
     }
 
@@ -269,9 +270,9 @@ async def _tts_ws_async(text: str, speaker: str, speed_ratio: float,
         # 1. StartConnection
         await ws.send(_build_ws_msg(1, b"{}"))
         raw = await asyncio.wait_for(ws.recv(), timeout=10)
-        _, ev, _ = _parse_ws_msg(raw)
+        _, ev, _, _pl = _parse_ws_msg(raw)
         if ev != 50:
-            raise RuntimeError(f"TTS: 未收到 ConnectionStarted（收到 event={ev}）")
+            raise RuntimeError(f"TTS: 未收到 ConnectionStarted（event={ev} payload={_pl[:200]!r}）")
 
         # 2. StartSession
         await ws.send(_build_ws_msg(
@@ -280,9 +281,9 @@ async def _tts_ws_async(text: str, speaker: str, speed_ratio: float,
             session_id,
         ))
         raw = await asyncio.wait_for(ws.recv(), timeout=10)
-        _, ev, _ = _parse_ws_msg(raw)
+        _, ev, _, _pl = _parse_ws_msg(raw)
         if ev != 150:
-            raise RuntimeError(f"TTS: 未收到 SessionStarted（收到 event={ev}）")
+            raise RuntimeError(f"TTS: 未收到 SessionStarted（event={ev} payload={_pl[:200]!r}）")
 
         # 3. TaskRequest + FinishSession（告知文本已完整）
         await ws.send(_build_ws_msg(
@@ -297,13 +298,13 @@ async def _tts_ws_async(text: str, speaker: str, speed_ratio: float,
         chunks = []
         while True:
             raw = await asyncio.wait_for(ws.recv(), timeout=30)
-            mt, ev, audio = _parse_ws_msg(raw)
+            mt, ev, audio, pl = _parse_ws_msg(raw)
             if audio:
                 chunks.append(audio)
             if mt == 9 and ev in (152, 359):   # SessionFinished / TTSEnded
                 break
             if mt == 15:
-                raise RuntimeError("TTS 服务器返回错误帧")
+                raise RuntimeError(f"TTS 服务器错误帧: {pl[:300].decode('utf-8', errors='replace') if pl else raw[:100]!r}")
 
         # 5. FinishConnection（best-effort）
         try:
@@ -349,6 +350,8 @@ def _tts_icl_http(text: str, voice_id: str, api_key: str, speed_ratio: float) ->
         headers={
             "Authorization": f"Bearer;{token}",
             "Content-Type":  "application/json",
+            # 不带此头时服务端默认归到 volc.megatts.default → 403 not granted
+            "Resource-Id":   "volc.megatts.voiceclone",
         },
         method="POST",
     )
@@ -385,12 +388,55 @@ def tts_synthesize(
     text = text[:500]
 
     if voice_id:
-        # 使用声音复刻的 speaker_id 合成
-        return _tts_icl_http(text, voice_id, api_key, speed)
+        # 使用声音复刻的 speaker_id 合成（自动探测可用路径）
+        return _tts_clone_multi(text, voice_id, speed)
 
     # 默认音色走 seed-tts-2.0 WebSocket
     speaker = DEFAULT_VOICE_MAP.get(language, DEFAULT_VOICE_MAP["zh"])
     return asyncio.run(_tts_ws_async(text, speaker, speed, api_key))
+
+
+# 克隆音色合成的可用路径（首次成功后缓存，后续直达）
+_CLONE_TTS_WINNER: Optional[str] = None
+
+
+def _tts_clone_multi(text: str, voice_id: str, speed: float) -> bytes:
+    """
+    克隆音色合成：不同账号购买的复刻商品（1.0/2.0）对应不同接口与 Resource-Id，
+    依次尝试，成功即缓存该路径。
+      v1        : V1 HTTP /api/v1/tts + Bearer;AccessToken + Resource-Id volc.megatts.voiceclone
+      icl2-key  : V3 WS + X-Api-Key(API Key) + seed-icl-2.0
+      icl2-tok  : V3 WS + X-Api-Key(AccessToken) + seed-icl-2.0
+      icl1-key  : V3 WS + X-Api-Key(API Key) + seed-icl-1.0
+      icl1-tok  : V3 WS + X-Api-Key(AccessToken) + seed-icl-1.0
+    """
+    global _CLONE_TTS_WINNER
+    api_key = config.VOLC_API_KEY
+    token   = _clone_token()
+
+    def _try(mode: str) -> bytes:
+        if mode == "v1":
+            return _tts_icl_http(text, voice_id, api_key, speed)
+        rid = "seed-icl-2.0" if "icl2" in mode else "seed-icl-1.0"
+        key = token if mode.endswith("-tok") else api_key
+        return asyncio.run(_tts_ws_async(text, voice_id, speed, key, resource_id=rid))
+
+    order = ([_CLONE_TTS_WINNER] if _CLONE_TTS_WINNER
+             else ["v1", "icl2-key", "icl2-tok", "icl1-key", "icl1-tok"])
+    errors = []
+    for mode in order:
+        try:
+            audio = _try(mode)
+            if audio:
+                if _CLONE_TTS_WINNER != mode:
+                    _CLONE_TTS_WINNER = mode
+                    print(f"[TTS] 克隆合成路径确定: {mode}")
+                return audio
+        except Exception as e:
+            errors.append(f"[{mode}] {e}")
+            continue
+    _CLONE_TTS_WINNER = None   # 缓存的路径也失效了，下次重新探测
+    raise RuntimeError("克隆音色合成失败，已尝试全部路径:\n" + "\n".join(errors))
 
 
 # ──────────────────────────────────────────────────────────────────────
