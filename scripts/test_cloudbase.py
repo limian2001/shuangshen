@@ -47,8 +47,8 @@ try:
 except Exception as e:
     print(f"❌ llm.chat 失败: {e}")
 
-# ③ Embedding（生产路径 llm.embed，自动走 hunyuan provider）
-print(f"\n── Embedding 测试 provider={config.CLOUDBASE_EMBED_PROVIDER} model={config.CLOUDBASE_EMBED_MODEL} ──")
+# ③ Embedding（生产路径 llm.embed → TokenHub）
+print(f"\n── Embedding 测试 {config.EMBED_BASE_URL} model={config.EMBED_MODEL} ──")
 vec = llm.embed("向量化测试文本")
 if vec:
     print(f"✅ llm.embed OK  维度={len(vec)}")
