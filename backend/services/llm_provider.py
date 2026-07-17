@@ -8,6 +8,7 @@ LLM 统一接口
 """
 import json
 import os
+import time
 import urllib.request
 import urllib.error
 from typing import Generator, List, Optional
@@ -218,18 +219,36 @@ class LLMProvider:
             "model": config.EMBED_MODEL,
             "input": [t[:2000] for t in inputs],
         }).encode()
-        req = urllib.request.Request(
-            f"{config.EMBED_BASE_URL.rstrip('/')}/embeddings",
-            data=payload,
-            headers={
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {key}",
-            },
-            method="POST",
-        )
-        with urllib.request.urlopen(req, timeout=60) as resp:
-            data = json.loads(resp.read())
-        return data.get("data", [])
+
+        # 5xx / 超时自动重试（网关抖动或模型冷启动时常见）
+        last_err: Exception = RuntimeError("unreachable")
+        for attempt in range(3):
+            req = urllib.request.Request(
+                f"{config.EMBED_BASE_URL.rstrip('/')}/embeddings",
+                data=payload,
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {key}",
+                },
+                method="POST",
+            )
+            try:
+                with urllib.request.urlopen(req, timeout=60) as resp:
+                    data = json.loads(resp.read())
+                return data.get("data", [])
+            except urllib.error.HTTPError as e:
+                if e.code >= 500 and attempt < 2:
+                    last_err = e
+                    time.sleep(2 * (attempt + 1))
+                    continue
+                raise
+            except (urllib.error.URLError, TimeoutError) as e:
+                if attempt < 2:
+                    last_err = e
+                    time.sleep(2 * (attempt + 1))
+                    continue
+                raise
+        raise last_err
 
     def embed(self, text: str) -> Optional[List[float]]:
         """
