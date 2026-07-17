@@ -205,7 +205,7 @@ def search_memories(
 
     # ── 优先：Chroma 向量检索 ──
     try:
-        from backend.services.llm_provider import llm
+        from backend.services.llm_provider import llm, alert
         from backend.services.chroma_store import query_memories as chroma_query
         query_vec = llm.embed(query)
         if query_vec:
@@ -213,8 +213,13 @@ def search_memories(
             if results:
                 return results
             # results 为空说明该替身在 Chroma 里没有记忆，降级到关键词
+        else:
+            # embed 返回 None 时 llm.embed 内部已发 EMBED降级 告警，
+            # 此处再记录检索层降级事实，方便统计降级频率
+            alert("RAG降级", f"avatar={avatar_id[:8]} 向量不可用，本次检索使用关键词匹配")
     except Exception as e:
-        print(f"[MEMORY] Chroma 检索失败，降级关键词: {e}")
+        from backend.services.llm_provider import alert
+        alert("RAG降级", f"avatar={avatar_id[:8]} Chroma 检索异常，降级关键词: {e}")
 
     # ── 降级：SQLite 关键词检索 ──
     with get_db() as conn:

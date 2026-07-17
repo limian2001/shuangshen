@@ -35,6 +35,12 @@ class Config:
     # DeepSeek Embedding（与 Chat 共用 API Key，注意确认模型名称）
     DEEPSEEK_EMBED_MODEL: str = os.getenv("DEEPSEEK_EMBED_MODEL", "text-embedding-v2")
 
+    # 腾讯 CloudBase AI 网关（OpenAI 兼容；备案合规 + 免费额度）
+    CLOUDBASE_BASE_URL: str    = os.getenv("CLOUDBASE_BASE_URL", "")   # https://<env>.api.tcloudbasegateway.com/v1/ai/cloudbase
+    CLOUDBASE_API_KEY: str     = os.getenv("CLOUDBASE_API_KEY", "")
+    CLOUDBASE_MODEL: str       = os.getenv("CLOUDBASE_MODEL", "deepseek-v4-flash")
+    CLOUDBASE_EMBED_MODEL: str = os.getenv("CLOUDBASE_EMBED_MODEL", "hunyuan-embedding")
+
     # RAG 检索配置
     RAG_TOP_K: int = int(os.getenv("RAG_TOP_K", 6))
     RAG_POOL_LIMIT: int = int(os.getenv("RAG_POOL_LIMIT", 500))
@@ -82,8 +88,6 @@ class Config:
     VOLC_CLUSTER: str       = os.getenv("VOLC_CLUSTER", "volcano_tts")
     # 声音复刻：控制台购买音色后获得的 S_ 开头 speaker_id，多个用英文逗号分隔
     VOLC_SPEAKER_IDS: str   = os.getenv("VOLC_SPEAKER_IDS", "")
-    # 声音复刻 Resource-Id（留空则自动尝试常见取值）
-    VOLC_CLONE_RESOURCE_ID: str = os.getenv("VOLC_CLONE_RESOURCE_ID", "")
 
     # 图片缓存（仅缩略图，超上限时按relevance_score淘汰）
     IMAGE_THUMB_MAX_WIDTH: int = int(os.getenv("IMAGE_THUMB_MAX_WIDTH", 300))

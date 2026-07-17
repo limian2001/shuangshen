@@ -15,6 +15,11 @@ from typing import Generator, List, Optional
 from backend.core.config import config
 
 
+def alert(tag: str, msg: str):
+    """降级/故障告警日志 — 统一前缀，方便 docker logs | grep ALERT 监控"""
+    print(f"⚠️ [ALERT][{tag}] {msg}", flush=True)
+
+
 class LLMProvider:
     """
     统一的 LLM 调用接口。
@@ -50,6 +55,7 @@ class LLMProvider:
             "openai":    self._call_openai,
             "local":     self._call_local,
             "deepseek":  self._call_deepseek,
+            "cloudbase": self._call_cloudbase,
         }
         fn = dispatch.get(self.provider)
         if fn is None:
@@ -146,70 +152,104 @@ class LLMProvider:
             data = json.loads(resp.read())
         return data["choices"][0]["message"]["content"]
 
+    # ─── 腾讯 CloudBase AI 网关（OpenAI 兼容） ────────────────────
+    def _call_cloudbase(
+        self, system: str, messages: list, max_tokens: int, temperature: float
+    ) -> str:
+        base = config.CLOUDBASE_BASE_URL.rstrip("/")
+        key  = config.CLOUDBASE_API_KEY
+        if not base or not key:
+            raise RuntimeError("CLOUDBASE_BASE_URL / CLOUDBASE_API_KEY 未配置")
+
+        full_messages = [{"role": "system", "content": system}] + messages
+        payload = json.dumps({
+            "model": config.CLOUDBASE_MODEL,
+            "messages": full_messages,
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+        }).encode()
+
+        req = urllib.request.Request(
+            f"{base}/chat/completions",
+            data=payload,
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {key}",
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=90) as resp:
+                data = json.loads(resp.read())
+            return data["choices"][0]["message"]["content"]
+        except Exception as e:
+            # CloudBase 失败（额度耗尽/网关异常）→ 自动回退 DeepSeek 直连
+            if config.DEEPSEEK_API_KEY:
+                alert("LLM降级", f"CloudBase 调用失败，回退 DeepSeek 直连: {e}")
+                return self._call_deepseek(system, messages, max_tokens, temperature)
+            raise
+
     # ─── DeepSeek Embedding ──────────────────────────────────────
+    def _embed_request(self, inputs: List[str]) -> list:
+        """
+        调用 CloudBase 混元 embedding（OpenAI 兼容 /embeddings）。
+        返回 API 的 data 数组；失败抛异常。
+        """
+        base = config.CLOUDBASE_BASE_URL.rstrip("/")
+        key  = config.CLOUDBASE_API_KEY
+        if not base or not key:
+            raise RuntimeError("CloudBase 未配置（CLOUDBASE_BASE_URL / CLOUDBASE_API_KEY）")
+        payload = json.dumps({
+            "model": config.CLOUDBASE_EMBED_MODEL,
+            "input": [t[:2000] for t in inputs],
+        }).encode()
+        req = urllib.request.Request(
+            f"{base}/embeddings",
+            data=payload,
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {key}",
+            },
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            data = json.loads(resp.read())
+        return data.get("data", [])
+
     def embed(self, text: str) -> Optional[List[float]]:
         """
-        将文本转换为向量（仅支持 DeepSeek provider）。
-        失败时返回 None，调用方应降级到关键词检索。
+        文本 → 向量（CloudBase 混元 embedding）。
+        失败返回 None，调用方降级关键词检索 —— 降级必须触发 ALERT 日志。
         """
-        api_key = config.DEEPSEEK_API_KEY
-        if not api_key:
-            return None
         try:
-            payload = json.dumps({
-                "model": config.DEEPSEEK_EMBED_MODEL,
-                "input": text[:2000],   # 防止超长
-            }).encode()
-            req = urllib.request.Request(
-                "https://api.deepseek.com/v1/embeddings",
-                data=payload,
-                headers={
-                    "Content-Type": "application/json",
-                    "Authorization": f"Bearer {api_key}",
-                },
-                method="POST",
-            )
-            with urllib.request.urlopen(req, timeout=30) as resp:
-                data = json.loads(resp.read())
-            return data["data"][0]["embedding"]
+            data = self._embed_request([text])
+            if data:
+                return data[0]["embedding"]
+            alert("EMBED降级", "embedding 返回空数据，RAG 将降级为关键词匹配")
+            return None
         except Exception as e:
-            print(f"[LLM] Embedding 调用失败: {e}")
+            alert("EMBED降级", f"embedding 调用失败，RAG 将降级为关键词匹配: {e}")
             return None
 
     def batch_embed(self, texts: List[str]) -> List[Optional[List[float]]]:
         """
-        批量获取向量。DeepSeek API 支持数组输入，单次调用。
-        返回与 texts 等长的列表，失败项为 None。
+        批量向量化。返回与 texts 等长的列表，失败项为 None。
         """
-        api_key = config.DEEPSEEK_API_KEY
-        if not api_key or not texts:
-            return [None] * len(texts)
+        if not texts:
+            return []
         try:
-            # DeepSeek embedding API 兼容 OpenAI，支持 input 为字符串数组
-            payload = json.dumps({
-                "model": config.DEEPSEEK_EMBED_MODEL,
-                "input": [t[:2000] for t in texts],
-            }).encode()
-            req = urllib.request.Request(
-                "https://api.deepseek.com/v1/embeddings",
-                data=payload,
-                headers={
-                    "Content-Type": "application/json",
-                    "Authorization": f"Bearer {api_key}",
-                },
-                method="POST",
-            )
-            with urllib.request.urlopen(req, timeout=60) as resp:
-                data = json.loads(resp.read())
-            # API 返回的 data 数组按 index 排列
+            data = self._embed_request(texts)
             result: List[Optional[List[float]]] = [None] * len(texts)
-            for item in data.get("data", []):
+            for item in data:
                 idx = item.get("index", 0)
                 if idx < len(result):
                     result[idx] = item["embedding"]
+            missing = sum(1 for r in result if r is None)
+            if missing:
+                alert("EMBED降级", f"batch_embed 缺失 {missing}/{len(texts)} 条向量")
             return result
         except Exception as e:
-            print(f"[LLM] batch_embed 调用失败: {e}")
+            alert("EMBED降级", f"batch_embed 调用失败（{len(texts)}条全部降级）: {e}")
             return [None] * len(texts)
 
     # ─── 本地模型 (Ollama) ───────────────────────────────────────

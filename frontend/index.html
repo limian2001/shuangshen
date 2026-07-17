@@ -2,8 +2,8 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="ss-build" content="20260716-8">
-<script>const SS_BUILD = '20260716-8'; console.log('ss-build: ' + SS_BUILD);</script>
+<meta name="ss-build" content="20260716-9">
+<script>const SS_BUILD = '20260716-9'; console.log('ss-build: ' + SS_BUILD);</script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>替身 · Shuangshen</title>
 <style>
@@ -3569,7 +3569,7 @@ function _sttStopMedia(cancel) {
 // ─── webm/opus → WAV 16k 单声道 ───
 // 腾讯 ASR 不支持 webm 容器（只支持 wav/mp3/ogg-opus/m4a 等），
 // 浏览器 MediaRecorder 录出的是 webm，必须先转码，否则识别永远为空。
-async function _sttBlobToWav(blob) {
+async function _sttBlobToWav(blob, rate = 16000) {
   const arrayBuf = await blob.arrayBuffer();
   const AC = window.AudioContext || window.webkitAudioContext;
   const ctx = new AC();
@@ -3583,8 +3583,7 @@ async function _sttBlobToWav(blob) {
   } finally {
     try { ctx.close(); } catch (e) {}
   }
-  // 重采样到 16kHz 单声道（多声道自动混音）
-  const rate = 16000;
+  // 重采样到目标采样率、单声道（多声道自动混音）
   const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
   const off = new OAC(1, Math.max(1, Math.ceil(decoded.duration * rate)), rate);
   const src = off.createBufferSource();
@@ -3997,8 +3996,18 @@ function resetRecording() {
 async function submitRecordedAudio() {
   if (!_rec.blob || !currentAvatar?.id) return;
   const lang = document.getElementById('voice-lang-select')?.value || 'zh';
+
+  // 火山 V3 复刻接口不支持 webm：录音先转 24kHz WAV（保留音质）
+  let blob = _rec.blob, ext = _rec.ext;
+  try {
+    blob = await _sttBlobToWav(_rec.blob, 24000);
+    ext = '.wav';
+  } catch (e) {
+    console.warn('样本 WAV 转码失败，按原格式上传:', e);
+  }
+
   const fd = new FormData();
-  fd.append('audio', _rec.blob, `recording_${Date.now()}${_rec.ext}`);
+  fd.append('audio', blob, `recording_${Date.now()}${ext}`);
   fd.append('language', lang);
   const btn = document.querySelector('[onclick="submitRecordedAudio()"]');
   if (btn) { btn.disabled = true; btn.textContent = '上传中…'; }

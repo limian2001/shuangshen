@@ -104,7 +104,8 @@ def tts_endpoint(avatar_id):
         # 克隆音色失败（如训练未完成）→ 自动降级为标准普通话音色
         # 注意打日志：降级是兜底，频繁触发说明克隆合成链路有问题
         if voice_id:
-            print(f"[TTS] 克隆音色合成失败，降级标准音色 voice_id={voice_id}: {e}")
+            from backend.services.llm_provider import alert
+            alert("TTS降级", f"克隆音色合成失败，降级标准音色 voice_id={voice_id}: {e}")
             try:
                 audio_bytes = tts_synthesize(text, voice_id=None, language=language)
             except RuntimeError as e2:

@@ -150,7 +150,7 @@ def _tc3_request(
 
 # ──────────────────────────────────────────────────────────────────────
 # TTS — 火山引擎 seed-tts-2.0（WebSocket 双向流 + X-Api-* 认证）
-# 声音复刻 — mega_tts V3（HTTP + X-Api-* 认证）
+# 声音复刻 — V3 接口（/api/v3/tts/voice_clone，X-Api-Key 认证）
 # ──────────────────────────────────────────────────────────────────────
 
 import asyncio
@@ -160,9 +160,9 @@ import struct
 # TTS WebSocket 端点（新版 seed-tts-2.0）
 VOLC_TTS_WS_URL = "wss://openspeech.bytedance.com/api/v3/tts/bidirection"
 
-# 声音复刻 HTTP 端点（mega_tts，新版鉴权）
-VOLC_CLONE_UPLOAD_URL = "https://openspeech.bytedance.com/api/v1/mega_tts/audio/upload"
-VOLC_CLONE_STATUS_URL = "https://openspeech.bytedance.com/api/v1/mega_tts/status"
+# 声音复刻 V3 端点（X-Api-Key 认证，与 TTS 同一个 API Key）
+VOLC_CLONE_UPLOAD_URL = "https://openspeech.bytedance.com/api/v3/tts/voice_clone"
+VOLC_CLONE_STATUS_URL = "https://openspeech.bytedance.com/api/v3/tts/get_voice"
 
 # 默认音色（seed-tts-2.0 新版音色名）
 DEFAULT_VOICE_MAP = {
@@ -317,57 +317,6 @@ async def _tts_ws_async(text: str, speaker: str, speed_ratio: float,
         await ws.close()
 
 
-VOLC_ICL_TTS_URL = "https://openspeech.bytedance.com/api/v1/tts"
-
-
-def _tts_icl_http(text: str, voice_id: str, api_key: str, speed_ratio: float) -> bytes:
-    """
-    声音复刻合成（V1 HTTP 接口，/api/v1/tts）。
-    voice_id 是声音克隆训练后的 speaker_id（S_ 开头），cluster 固定为 volcano_icl。
-    认证与克隆上传同族：Bearer;AccessToken（不是 V3 的 x-api-key）。
-    """
-    token   = _clone_token()
-    app_id  = config.VOLC_APP_ID
-    req_id  = _rand_id()
-    payload = json.dumps({
-        "app":  {"appid": app_id, "token": token, "cluster": "volcano_icl"},
-        "user": {"uid": req_id[:16]},
-        "audio": {
-            "voice_type":  voice_id,
-            "encoding":    "mp3",
-            "speed_ratio": round(speed_ratio, 2),
-        },
-        "request": {
-            "reqid":     req_id,
-            "text":      text,
-            "operation": "query",
-        },
-    }, ensure_ascii=False).encode()
-
-    req = urllib.request.Request(
-        VOLC_ICL_TTS_URL,
-        data=payload,
-        headers={
-            "Authorization": f"Bearer;{token}",
-            "Content-Type":  "application/json",
-            # 不带此头时服务端默认归到 volc.megatts.default → 403 not granted
-            "Resource-Id":   "volc.megatts.voiceclone",
-        },
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            data = json.loads(resp.read())
-        code = data.get("code", 0)
-        if code != 3000:
-            raise RuntimeError(f"ICL TTS 错误 code={code}: {data.get('message', '')}")
-        import base64 as _b64
-        return _b64.b64decode(data.get("data", ""))
-    except urllib.error.HTTPError as e:
-        body = e.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"ICL TTS HTTP 错误 {e.code}: {body}") from e
-
-
 def tts_synthesize(
     text: str,
     voice_id: Optional[str] = None,
@@ -402,45 +351,20 @@ _CLONE_TTS_WINNER: Optional[str] = None
 
 def _tts_clone_multi(text: str, voice_id: str, speed: float) -> bytes:
     """
-    克隆音色合成：不同账号购买的复刻商品（1.0/2.0）对应不同接口与 Resource-Id，
-    依次尝试，成功即缓存该路径。
-      v1        : V1 HTTP /api/v1/tts + Bearer;AccessToken + Resource-Id volc.megatts.voiceclone
-      icl2-key  : V3 WS + X-Api-Key(API Key) + seed-icl-2.0
-      icl2-tok  : V3 WS + X-Api-Key(AccessToken) + seed-icl-2.0
-      icl1-key  : V3 WS + X-Api-Key(API Key) + seed-icl-1.0
-      icl1-tok  : V3 WS + X-Api-Key(AccessToken) + seed-icl-1.0
+    克隆音色合成（声音复刻 2.0）：V3 WebSocket + X-Api-Resource-Id: seed-icl-2.0。
+    与默认音色走同一 WS 端点，仅 Resource-Id 与 speaker 不同。
+    实测（2026-07）：本账号 API Key 可通过 seed-icl-2.0 认证；
+    V1 HTTP 合成与 seed-icl-1.0 均无授权，已移除。
     """
     global _CLONE_TTS_WINNER
-    api_key = config.VOLC_API_KEY
-    token   = _clone_token()
-
-    def _try(mode: str) -> bytes:
-        if mode == "v1":
-            return _tts_icl_http(text, voice_id, api_key, speed)
-        rid = "seed-icl-2.0" if "icl2" in mode else "seed-icl-1.0"
-        key = token if mode.endswith("-tok") else api_key
-        return asyncio.run(_tts_ws_async(text, voice_id, speed, key, resource_id=rid))
-
-    order = ([_CLONE_TTS_WINNER] if _CLONE_TTS_WINNER
-             else ["v1", "icl2-key", "icl2-tok", "icl1-key", "icl1-tok"])
-    errors = []
-    for mode in order:
-        try:
-            audio = _try(mode)
-            if audio:
-                if _CLONE_TTS_WINNER != mode:
-                    _CLONE_TTS_WINNER = mode
-                    print(f"[TTS] 克隆合成路径确定: {mode}")
-                return audio
-        except Exception as e:
-            errors.append(f"[{mode}] {e}")
-            continue
-    _CLONE_TTS_WINNER = None   # 缓存的路径也失效了，下次重新探测
-    raise RuntimeError("克隆音色合成失败，已尝试全部路径:\n" + "\n".join(errors))
+    _CLONE_TTS_WINNER = "icl2-key"
+    return asyncio.run(_tts_ws_async(
+        text, voice_id, speed, config.VOLC_API_KEY, resource_id="seed-icl-2.0"
+    ))
 
 
 # ──────────────────────────────────────────────────────────────────────
-# 声音复刻（mega_tts V3，HTTP + X-Api-* 认证）
+# 声音复刻（V3 接口，X-Api-Key 认证）
 # ──────────────────────────────────────────────────────────────────────
 
 def _volc_headers(app_id: str, api_key: str, extra: dict | None = None) -> dict:
@@ -455,78 +379,54 @@ def _volc_headers(app_id: str, api_key: str, extra: dict | None = None) -> dict:
     return h
 
 
-# V1 mega_tts 接口的 Resource-Id 因账号购买的商品不同而不同，自动逐个尝试
-_CLONE_RESOURCE_CANDIDATES = ["volc.megatts.voiceclone", "seed-icl-1.0", "seed-icl-2.0"]
-
-
-def _clone_resource_ids() -> list[str]:
-    if config.VOLC_CLONE_RESOURCE_ID:
-        return [config.VOLC_CLONE_RESOURCE_ID]
-    return _CLONE_RESOURCE_CANDIDATES
-
-
-def _clone_token() -> str:
-    # 声音复刻 V1 接口用语音应用的 Access Token；未配置时退回 API Key
-    return config.VOLC_ACCESS_TOKEN or config.VOLC_API_KEY
-
-
-def voice_clone_upload(speaker_id: str, sample_bytes: bytes, filename: str) -> str:
+def voice_clone_upload(speaker_id: str, sample_bytes: bytes, filename: str,
+                       language: int = 0, demo_text: str = "") -> str:
     """
-    上传声音样本到火山引擎 mega_tts（上传即触发训练），返回 speaker_id。
+    声音复刻 V3 训练接口：POST /api/v3/tts/voice_clone
+    上传即训练，返回 speaker_id。
+    认证：X-Api-Key（与 TTS 相同的 API Key）。
+    音频格式支持：wav / mp3 / ogg / m4a / aac / pcm（webm 不支持，前端已转 wav）。
     speaker_id: 控制台购买音色获得的 S_ 开头 ID（配置在 VOLC_SPEAKER_IDS）。
     """
-    app_id = config.VOLC_APP_ID
-    token  = _clone_token()
-    if not app_id or not token:
+    api_key = config.VOLC_API_KEY
+    if not api_key:
         raise RuntimeError("火山引擎 TTS 未配置")
 
     _fn = filename.lower()
-    audio_fmt = ("mp3"  if _fn.endswith(".mp3")  else
-                 "m4a"  if _fn.endswith(".m4a")  else
-                 "aac"  if _fn.endswith(".aac")  else
-                 "ogg"  if _fn.endswith(".ogg")  else
-                 "wav"  if _fn.endswith(".wav")  else
-                 "webm")   # Chrome 录制默认 webm
+    audio_fmt = ("mp3" if _fn.endswith(".mp3") else
+                 "m4a" if _fn.endswith(".m4a") else
+                 "aac" if _fn.endswith(".aac") else
+                 "ogg" if _fn.endswith(".ogg") else
+                 "pcm" if _fn.endswith(".pcm") else
+                 "wav" if _fn.endswith(".wav") else "")
 
-    payload = json.dumps({
-        "appid":      app_id,
-        "speaker_id": speaker_id[:64],
-        "audios": [{
-            "audio_bytes": base64.b64encode(sample_bytes).decode(),
-            "audio_format": audio_fmt,
-        }],
-        "source":     2,                # 固定值 2
-        "language":   0,                # 0=中文
-        "model_type": 1,                # 1=ICL 声音复刻
-    }).encode()
+    audio_obj: dict = {"data": base64.b64encode(sample_bytes).decode()}
+    if audio_fmt:   # 文档：pcm/m4a 必传，其余可不指定
+        audio_obj["format"] = audio_fmt
 
-    last_err = ""
-    for rid in _clone_resource_ids():
-        headers = {
-            "Content-Type":  "application/json",
-            "Authorization": f"Bearer;{token}",
-            "Resource-Id":   rid,
-        }
-        req = urllib.request.Request(VOLC_CLONE_UPLOAD_URL, data=payload, headers=headers, method="POST")
-        try:
-            with urllib.request.urlopen(req, timeout=60) as resp:
-                data = json.loads(resp.read())
-            if data.get("BaseResp", {}).get("StatusCode") != 0:
-                raise RuntimeError(f"声音上传失败: {data}")
-            return data.get("speaker_id", speaker_id[:64])
-        except urllib.error.HTTPError as e:
-            body_err = e.read().decode("utf-8", errors="replace")
-            # grant 类 401 → 换下一个 Resource-Id 重试；其他错误直接抛
-            if e.code == 401 and "grant" in body_err.lower():
-                last_err = f"[{rid}] {e.code}: {body_err}"
-                continue
-            raise RuntimeError(f"声音上传错误 {e.code}: {body_err}") from e
+    body: dict = {
+        "speaker_id": speaker_id,
+        "audio":      audio_obj,
+        "language":   language,   # 0=中文
+    }
+    if demo_text:
+        body["extra_params"] = {"demo_text": demo_text[:300]}
 
-    raise RuntimeError(
-        "声音复刻鉴权失败（grant not found）：火山控制台可能未开通【声音复刻】服务，"
-        "或未购买音色实例。请在控制台开通并下单音色，把获得的 S_ 开头 speaker_id "
-        "填入 .env 的 VOLC_SPEAKER_IDS。最后错误: " + last_err
-    )
+    headers = {
+        "Content-Type":     "application/json",
+        "X-Api-Key":        api_key,
+        "X-Api-Request-Id": _rand_id(),
+    }
+    req = urllib.request.Request(VOLC_CLONE_UPLOAD_URL,
+                                 data=json.dumps(body).encode(),
+                                 headers=headers, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            data = json.loads(resp.read())
+        return data.get("speaker_id", speaker_id)
+    except urllib.error.HTTPError as e:
+        body_err = e.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"声音上传错误 {e.code}: {body_err}") from e
 
 
 def voice_clone_status(speaker_id: str) -> dict:
@@ -538,35 +438,27 @@ def voice_clone_status(speaker_id: str) -> dict:
     app_id  = config.VOLC_APP_ID
     api_key = config.VOLC_API_KEY
 
-    payload = json.dumps({
-        "appid":      app_id,
-        "speaker_id": speaker_id,
-    }).encode()
-    token = _clone_token()
-    for rid in _clone_resource_ids():
-        headers = {
-            "Content-Type":  "application/json",
-            "Authorization": f"Bearer;{token}",
-            "Resource-Id":   rid,
-        }
-        req = urllib.request.Request(VOLC_CLONE_STATUS_URL, data=payload, headers=headers, method="POST")
-        try:
-            with urllib.request.urlopen(req, timeout=15) as resp:
-                data = json.loads(resp.read())
-            # status 字段: 0=NotFound, 1=Training, 2=Success, 3=Failed, 4=Active
-            s = data.get("status", 0)
-            if s in (2, 4):   # Success / Active — 均可调用 TTS
-                return {"status": "success", "voice_id": speaker_id}
-            elif s == 3:
-                return {"status": "failed", "voice_id": ""}
-            else:
-                return {"status": "training", "voice_id": ""}
-        except urllib.error.HTTPError as e:
-            body_err = e.read().decode("utf-8", errors="replace")
-            if e.code == 401 and "grant" in body_err.lower():
-                continue   # 换下一个 Resource-Id
+    headers = {
+        "Content-Type":     "application/json",
+        "X-Api-Key":        config.VOLC_API_KEY,
+        "X-Api-Request-Id": _rand_id(),
+    }
+    req = urllib.request.Request(VOLC_CLONE_STATUS_URL,
+                                 data=json.dumps({"speaker_id": speaker_id}).encode(),
+                                 headers=headers, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            data = json.loads(resp.read())
+        # status: 0=NotFound, 1=Training, 2=Success, 3=Failed, 4=Active（2/4 可合成）
+        s = data.get("status", 0)
+        if s in (2, 4):
+            return {"status": "success", "voice_id": speaker_id}
+        elif s == 3:
             return {"status": "failed", "voice_id": ""}
-    return {"status": "failed", "voice_id": ""}
+        else:
+            return {"status": "training", "voice_id": ""}
+    except urllib.error.HTTPError:
+        return {"status": "failed", "voice_id": ""}
 
 
 
