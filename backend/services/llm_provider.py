@@ -162,26 +162,37 @@ class LLMProvider:
             raise RuntimeError("CLOUDBASE_BASE_URL / CLOUDBASE_API_KEY 未配置")
 
         full_messages = [{"role": "system", "content": system}] + messages
-        payload = json.dumps({
-            "model": config.CLOUDBASE_MODEL,
-            "messages": full_messages,
-            "max_tokens": max_tokens,
-            "temperature": temperature,
-        }).encode()
 
-        req = urllib.request.Request(
-            f"{base}/chat/completions",
-            data=payload,
-            headers={
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {key}",
-            },
-            method="POST",
-        )
-        try:
+        def _once(mt: int) -> str:
+            payload = json.dumps({
+                "model": config.CLOUDBASE_MODEL,
+                "messages": full_messages,
+                "max_tokens": mt,
+                "temperature": temperature,
+            }).encode()
+            req = urllib.request.Request(
+                f"{base}/chat/completions",
+                data=payload,
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {key}",
+                },
+                method="POST",
+            )
             with urllib.request.urlopen(req, timeout=90) as resp:
                 data = json.loads(resp.read())
-            return data["choices"][0]["message"]["content"]
+            return data["choices"][0]["message"].get("content") or ""
+
+        try:
+            # v4-flash 是思维链模型：reasoning 也消耗 max_tokens 额度，
+            # 小额度调用可能全被推理吃掉导致正文为空 → 给足余量 + 空结果扩容重试
+            content = _once(max(max_tokens, 300) + 500)
+            if not content:
+                alert("LLM重试", f"CloudBase 返回空正文(思维链耗尽额度)，扩容至 {max_tokens + 2000} 重试")
+                content = _once(max_tokens + 2000)
+            if content:
+                return content
+            raise RuntimeError("CloudBase 连续两次返回空正文")
         except Exception as e:
             # CloudBase 失败（额度耗尽/网关异常）→ 自动回退 DeepSeek 直连
             if config.DEEPSEEK_API_KEY:
