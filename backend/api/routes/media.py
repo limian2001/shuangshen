@@ -177,9 +177,32 @@ def upload_voice_sample(avatar_id):
             (sample_id, avatar_id, filename, str(file_path)),
         )
 
+    # ── 选定 speaker_id ──────────────────────────────────────────
+    # 火山声音复刻的 speaker_id 必须是控制台购买音色获得的 S_ 开头 ID。
+    # 优先沿用替身已分配的；否则从 VOLC_SPEAKER_IDS 池中取一个未被占用的。
+    speaker_id = (avatar.get("voice_model_id") or "").strip()
+    if not speaker_id.startswith("S_"):
+        pool = [s.strip() for s in config.VOLC_SPEAKER_IDS.split(",") if s.strip()]
+        if pool:
+            with get_db() as conn:
+                used = {
+                    r["voice_model_id"]
+                    for r in rows_to_list(conn.execute(
+                        "SELECT voice_model_id FROM avatars "
+                        "WHERE voice_model_id IS NOT NULL AND voice_model_id != '' AND id != ?",
+                        (avatar_id,),
+                    ).fetchall())
+                }
+            free = [s for s in pool if s not in used]
+            if not free:
+                return jsonify({"error": "音色名额已用完：控制台购买的 speaker_id 均已分配给其他替身"}), 400
+            speaker_id = free[0]
+        else:
+            speaker_id = avatar_id[:64]   # 未配置池时沿用旧逻辑（部分账号支持）
+
     # 上传到火山引擎（upload 接口同时触发训练，返回 speaker_id）
     try:
-        speaker_id = voice_clone_upload(avatar_id, audio_bytes, filename)
+        speaker_id = voice_clone_upload(speaker_id, audio_bytes, filename)
         with get_db() as conn:
             conn.execute(
                 "UPDATE voice_samples SET clone_voice_id=?, status='training' WHERE id=?",

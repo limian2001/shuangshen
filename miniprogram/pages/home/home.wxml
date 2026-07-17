@@ -19,7 +19,7 @@
 
   <!-- 示例对话：让用户感受产品 -->
   <view class="demo-section">
-    <view class="demo-label">✦ 就像这样对话</view>
+    <view class="demo-label">✦ 就像这样对话（以下内容由 AI 生成）</view>
     <view class="demo-chat">
       <view class="bubble-wrap right">
         <view class="bubble bubble-user">妈，我今天工作不顺利，好累……</view>
@@ -36,6 +36,7 @@
         <view class="bubble bubble-ai">妈一直都在。只要你想我，就来这里说说话。</view>
       </view>
     </view>
+    <view class="ai-notice">🤖 本产品中替身的形象与全部对话内容均由人工智能（AI）生成</view>
   </view>
 
   <!-- 功能亮点 -->
@@ -70,6 +71,8 @@
     <view class="cta-hint">一分钟上手 · 随时随地对话</view>
   </view>
 
-  <view class="landing-footer">言己 — 让思念有处安放</view>
+  <view class="landing-footer">言己 — 让思念有处安放
+    <view class="landing-footer-ai">对话内容由人工智能生成</view>
+  </view>
 
 </scroll-view>

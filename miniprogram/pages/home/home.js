@@ -12,6 +12,13 @@ Page({
   },
 
   onLoad(options) {
+    // 网页端"退出登录"跳转回来：清除小程序侧 token，回到落地页
+    if (options && options.logout === '1') {
+      app.clearAuth();
+      this.setData({ isLoggedIn: false, isGuest: false, webviewUrl: '' });
+      return;
+    }
+
     // 记录分享链接中的邀请码
     if (options && options.ref) {
       app.globalData.pendingRefCode = options.ref;

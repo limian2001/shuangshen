@@ -403,14 +403,29 @@ def _volc_headers(app_id: str, api_key: str, extra: dict | None = None) -> dict:
     return h
 
 
-def voice_clone_upload(avatar_id: str, sample_bytes: bytes, filename: str) -> str:
+# V1 mega_tts 接口的 Resource-Id 因账号购买的商品不同而不同，自动逐个尝试
+_CLONE_RESOURCE_CANDIDATES = ["volc.megatts.voiceclone", "seed-icl-1.0", "seed-icl-2.0"]
+
+
+def _clone_resource_ids() -> list[str]:
+    if config.VOLC_CLONE_RESOURCE_ID:
+        return [config.VOLC_CLONE_RESOURCE_ID]
+    return _CLONE_RESOURCE_CANDIDATES
+
+
+def _clone_token() -> str:
+    # 声音复刻 V1 接口用语音应用的 Access Token；未配置时退回 API Key
+    return config.VOLC_ACCESS_TOKEN or config.VOLC_API_KEY
+
+
+def voice_clone_upload(speaker_id: str, sample_bytes: bytes, filename: str) -> str:
     """
-    上传声音样本到火山引擎 mega_tts，返回 audio_id。
-    接口接受 JSON + base64 编码音频（非 multipart）。
+    上传声音样本到火山引擎 mega_tts（上传即触发训练），返回 speaker_id。
+    speaker_id: 控制台购买音色获得的 S_ 开头 ID（配置在 VOLC_SPEAKER_IDS）。
     """
-    app_id  = config.VOLC_APP_ID
-    api_key = config.VOLC_API_KEY
-    if not app_id or not api_key:
+    app_id = config.VOLC_APP_ID
+    token  = _clone_token()
+    if not app_id or not token:
         raise RuntimeError("火山引擎 TTS 未配置")
 
     _fn = filename.lower()
@@ -422,8 +437,8 @@ def voice_clone_upload(avatar_id: str, sample_bytes: bytes, filename: str) -> st
                  "webm")   # Chrome 录制默认 webm
 
     payload = json.dumps({
-        "appid":      app_id,           # 必填
-        "speaker_id": avatar_id[:64],
+        "appid":      app_id,
+        "speaker_id": speaker_id[:64],
         "audios": [{
             "audio_bytes": base64.b64encode(sample_bytes).decode(),
             "audio_format": audio_fmt,
@@ -433,23 +448,33 @@ def voice_clone_upload(avatar_id: str, sample_bytes: bytes, filename: str) -> st
         "model_type": 1,                # 1=ICL 声音复刻
     }).encode()
 
-    # V1 mega_tts 接口认证：Bearer;token + Resource-Id（不是 X-Api-* 头）
-    headers = {
-        "Content-Type":  "application/json",
-        "Authorization": f"Bearer;{api_key}",
-        "Resource-Id":   "seed-icl-1.0",
-    }
-    req = urllib.request.Request(VOLC_CLONE_UPLOAD_URL, data=payload, headers=headers, method="POST")
-    try:
-        with urllib.request.urlopen(req, timeout=60) as resp:
-            data = json.loads(resp.read())
-        if data.get("BaseResp", {}).get("StatusCode") != 0:
-            raise RuntimeError(f"声音上传失败: {data}")
-        # 上传即触发训练，接口直接返回 speaker_id
-        return data.get("speaker_id", avatar_id[:64])
-    except urllib.error.HTTPError as e:
-        body_err = e.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"声音上传错误 {e.code}: {body_err}") from e
+    last_err = ""
+    for rid in _clone_resource_ids():
+        headers = {
+            "Content-Type":  "application/json",
+            "Authorization": f"Bearer;{token}",
+            "Resource-Id":   rid,
+        }
+        req = urllib.request.Request(VOLC_CLONE_UPLOAD_URL, data=payload, headers=headers, method="POST")
+        try:
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                data = json.loads(resp.read())
+            if data.get("BaseResp", {}).get("StatusCode") != 0:
+                raise RuntimeError(f"声音上传失败: {data}")
+            return data.get("speaker_id", speaker_id[:64])
+        except urllib.error.HTTPError as e:
+            body_err = e.read().decode("utf-8", errors="replace")
+            # grant 类 401 → 换下一个 Resource-Id 重试；其他错误直接抛
+            if e.code == 401 and "grant" in body_err.lower():
+                last_err = f"[{rid}] {e.code}: {body_err}"
+                continue
+            raise RuntimeError(f"声音上传错误 {e.code}: {body_err}") from e
+
+    raise RuntimeError(
+        "声音复刻鉴权失败（grant not found）：火山控制台可能未开通【声音复刻】服务，"
+        "或未购买音色实例。请在控制台开通并下单音色，把获得的 S_ 开头 speaker_id "
+        "填入 .env 的 VOLC_SPEAKER_IDS。最后错误: " + last_err
+    )
 
 
 def voice_clone_status(speaker_id: str) -> dict:
@@ -465,25 +490,31 @@ def voice_clone_status(speaker_id: str) -> dict:
         "appid":      app_id,
         "speaker_id": speaker_id,
     }).encode()
-    headers = {
-        "Content-Type":  "application/json",
-        "Authorization": f"Bearer;{api_key}",
-        "Resource-Id":   "seed-icl-1.0",
-    }
-    req = urllib.request.Request(VOLC_CLONE_STATUS_URL, data=payload, headers=headers, method="POST")
-    try:
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            data = json.loads(resp.read())
-        # status 字段: 0=NotFound, 1=Training, 2=Success, 3=Failed, 4=Active
-        s = data.get("status", 0)
-        if s in (2, 4):   # Success / Active — 均可调用 TTS
-            return {"status": "success", "voice_id": speaker_id}
-        elif s == 3:
+    token = _clone_token()
+    for rid in _clone_resource_ids():
+        headers = {
+            "Content-Type":  "application/json",
+            "Authorization": f"Bearer;{token}",
+            "Resource-Id":   rid,
+        }
+        req = urllib.request.Request(VOLC_CLONE_STATUS_URL, data=payload, headers=headers, method="POST")
+        try:
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                data = json.loads(resp.read())
+            # status 字段: 0=NotFound, 1=Training, 2=Success, 3=Failed, 4=Active
+            s = data.get("status", 0)
+            if s in (2, 4):   # Success / Active — 均可调用 TTS
+                return {"status": "success", "voice_id": speaker_id}
+            elif s == 3:
+                return {"status": "failed", "voice_id": ""}
+            else:
+                return {"status": "training", "voice_id": ""}
+        except urllib.error.HTTPError as e:
+            body_err = e.read().decode("utf-8", errors="replace")
+            if e.code == 401 and "grant" in body_err.lower():
+                continue   # 换下一个 Resource-Id
             return {"status": "failed", "voice_id": ""}
-        else:
-            return {"status": "training", "voice_id": ""}
-    except urllib.error.HTTPError:
-        return {"status": "failed", "voice_id": ""}
+    return {"status": "failed", "voice_id": ""}
 
 
 

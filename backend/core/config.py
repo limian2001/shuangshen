@@ -80,6 +80,10 @@ class Config:
     # 以下为旧版兼容，新版不再使用
     VOLC_ACCESS_TOKEN: str  = os.getenv("VOLC_ACCESS_TOKEN", "")
     VOLC_CLUSTER: str       = os.getenv("VOLC_CLUSTER", "volcano_tts")
+    # 声音复刻：控制台购买音色后获得的 S_ 开头 speaker_id，多个用英文逗号分隔
+    VOLC_SPEAKER_IDS: str   = os.getenv("VOLC_SPEAKER_IDS", "")
+    # 声音复刻 Resource-Id（留空则自动尝试常见取值）
+    VOLC_CLONE_RESOURCE_ID: str = os.getenv("VOLC_CLONE_RESOURCE_ID", "")
 
     # 图片缓存（仅缩略图，超上限时按relevance_score淘汰）
     IMAGE_THUMB_MAX_WIDTH: int = int(os.getenv("IMAGE_THUMB_MAX_WIDTH", 300))

@@ -2,8 +2,8 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="ss-build" content="20260716-6">
-<script>const SS_BUILD = '20260716-6'; console.log('ss-build: ' + SS_BUILD);</script>
+<meta name="ss-build" content="20260716-8">
+<script>const SS_BUILD = '20260716-8'; console.log('ss-build: ' + SS_BUILD);</script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>替身 · Shuangshen</title>
 <style>
@@ -485,7 +485,7 @@ body.is-mobile .row .field   { width: 100%; }
   <div class="lp-body">
 
     <!-- 示例对话 -->
-    <div class="lp-demo-label">✦ 就像这样对话</div>
+    <div class="lp-demo-label">✦ 就像这样对话（以下内容由 AI 生成）</div>
     <div class="lp-demo">
       <div class="lp-brow right">
         <div class="lp-bubble lp-bubble-user">妈，我今天工作不顺利，好累……</div>
@@ -544,7 +544,9 @@ body.is-mobile .row .field   { width: 100%; }
       </div>
     </div>
 
-    <div class="lp-footer">言己 — 让思念有处安放</div>
+    <div class="lp-footer">言己 — 让思念有处安放<br>
+      <span style="display:inline-block;margin-top:8px">本产品中替身的形象与对话内容均由人工智能（AI）生成</span>
+    </div>
   </div>
 </div>
 
@@ -654,9 +656,12 @@ body.is-mobile .row .field   { width: 100%; }
       <div class="page-header">
         <h2>我的替身</h2>
       </div>
-      <p style="font-size:13px;color:var(--text-3);margin-bottom:16px;line-height:1.8">
+      <p style="font-size:13px;color:var(--text-3);margin-bottom:10px;line-height:1.8">
         创建你的替身，分享给指定的对方使用，对方跟你的替身聊天就像在跟你本人聊天一样。你通过人设、喂数据（历史聊天记录）、记忆点让替身更像你。
       </p>
+      <div style="background:rgba(83,74,183,.08);border:1px solid rgba(83,74,183,.18);border-radius:10px;padding:10px 14px;margin-bottom:16px;font-size:13px;color:var(--purple,#534AB7);font-weight:600;display:flex;align-items:center;gap:8px">
+        <span style="font-size:16px">🤖</span> 替身是由人工智能（AI）技术生成的虚拟形象，其全部对话内容均为 AI 生成
+      </div>
       <button class="btn btn-primary" onclick="showCreateAvatar()" style="margin-bottom:20px">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         创建新替身
@@ -713,6 +718,9 @@ body.is-mobile .row .field   { width: 100%; }
           <label>人设描述（已根据关系预填，可修改）</label>
           <textarea id="new-avatar-desc" style="min-height:90px" placeholder="描述这个替身的背景、性格特点、说话方式…"></textarea>
         </div>
+        <p style="font-size:12px;color:var(--text-3);margin:8px 0 6px;line-height:1.6">
+          🤖 提示：替身创建后，它的形象与所有对话回复均由<b>人工智能（AI）生成</b>，不代表真实人物的言论。
+        </p>
         <div style="display:flex;gap:8px;margin-top:4px">
           <button class="btn btn-primary btn-sm" onclick="doCreateAvatar()">创建</button>
           <button class="btn btn-secondary btn-sm" onclick="hideCreateAvatar()">取消</button>
@@ -736,7 +744,7 @@ body.is-mobile .row .field   { width: 100%; }
     <div id="page-received" class="page" style="display:none">
       <div class="page-header">
         <h2>绑定的替身</h2>
-        <p>通过共享码绑定后，你可以与替身对话</p>
+        <p>通过共享码绑定后，你可以与替身对话（对话内容由人工智能生成）</p>
       </div>
       <div class="card" style="margin-bottom:20px">
         <div class="card-title">绑定新替身</div>
@@ -1585,6 +1593,12 @@ function doLogout() {
   localStorage.removeItem('ss_user');
   sessionStorage.removeItem('ss_guest');
   token = null; currentUser = null; currentAvatar = null;
+  if (window.__wxjs_environment === 'miniprogram' && window.wx && wx.miniProgram) {
+    // 小程序内：通知小程序清除它自己的 token，并跳回原生落地页
+    wx.miniProgram.postMessage({ data: { type: 'auth_expired' } });
+    wx.miniProgram.reLaunch({ url: '/pages/home/home?logout=1' });
+    return;
+  }
   showAuth(); showLogin();
 }
 
@@ -2034,8 +2048,9 @@ function appendMsg(role, content, animate, intercepted) {
   const aiBadge = isUser ? '' : '<span style="display:block;font-size:10px;color:var(--text-3);margin-top:3px;text-align:right">AI 生成</span>';
 
   // TTS 控件：只在替身声音克隆成功时显示小喇叭（播放模仿本人的声音）
+  // 合规要求："AI 生成"标注在所有 bot 消息上始终显示，不被喇叭替换
   const voiceCtrl = (!isUser && _avatarHasVoice)
-    ? `<div class="msg-audio" id="audio-wrap-${idx}" style="display:none"><audio id="audio-${idx}" controls></audio></div><span class="msg-voice-toggle" data-idx="${idx}">🔊 点击播放语音</span>`
+    ? `<div class="msg-audio" id="audio-wrap-${idx}" style="display:none"><audio id="audio-${idx}" controls></audio></div><span class="msg-voice-toggle" data-idx="${idx}">🔊 点击播放语音</span>${aiBadge}`
     : aiBadge;
 
   div.innerHTML = `
