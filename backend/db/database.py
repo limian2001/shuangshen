@@ -311,6 +311,36 @@ def _run_migrations(conn: sqlite3.Connection):
         "ALTER TABLE chat_messages ADD COLUMN msg_type TEXT DEFAULT 'text'",
         "ALTER TABLE chat_messages ADD COLUMN audio_path TEXT DEFAULT NULL",
         "ALTER TABLE chat_messages ADD COLUMN duration INTEGER DEFAULT 0",
+        # v1.3: 系统告警持久化（降级/API失败/未捕获异常，供 admin 查看）
+        """CREATE TABLE IF NOT EXISTS system_alerts (
+            id         TEXT PRIMARY KEY,
+            tag        TEXT NOT NULL,              -- LLM降级|EMBED降级|RAG降级|TTS降级|LLM重试|API异常|...
+            message    TEXT NOT NULL,
+            avatar_id  TEXT DEFAULT NULL,
+            created_at TEXT DEFAULT (datetime('now'))
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_alerts_created ON system_alerts(created_at)",
+        "CREATE INDEX IF NOT EXISTS idx_alerts_tag ON system_alerts(tag)",
+        # v1.4: 对话链路 Trace（话题检测/记忆检索/Prompt/LLM 全过程，admin 可查）
+        """CREATE TABLE IF NOT EXISTS chat_traces (
+            id          TEXT PRIMARY KEY,
+            message_id  TEXT NOT NULL,           -- 对应 chat_messages.id（用户消息）
+            avatar_id   TEXT NOT NULL,
+            receiver_id TEXT NOT NULL,
+            trace       TEXT NOT NULL,           -- JSON: topic/retrieval/prompt/llm
+            created_at  TEXT DEFAULT (datetime('now'))
+        )""",
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_traces_msg ON chat_traces(message_id)",
+        "CREATE INDEX IF NOT EXISTS idx_traces_created ON chat_traces(created_at)",
+        # v1.3: RAG 检索命中统计（按替身按日聚合，供 admin 观察算法效果）
+        """CREATE TABLE IF NOT EXISTS rag_counters (
+            avatar_id         TEXT NOT NULL,
+            date              TEXT NOT NULL,       -- YYYY-MM-DD
+            vector_hits       INTEGER DEFAULT 0,   -- 向量检索命中
+            keyword_fallbacks INTEGER DEFAULT 0,   -- 降级关键词匹配
+            empty_results     INTEGER DEFAULT 0,   -- 无任何结果
+            PRIMARY KEY (avatar_id, date)
+        )""",
     ]
     for sql in migrations:
         try:

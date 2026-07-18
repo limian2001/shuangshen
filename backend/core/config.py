@@ -46,6 +46,11 @@ class Config:
     EMBED_API_KEY: str  = os.getenv("EMBED_API_KEY", "")
     EMBED_MODEL: str    = os.getenv("EMBED_MODEL", "hunyuan-embedding")
 
+    # 对话链路 Trace（全链路可见性）
+    TRACE_ENABLED: bool       = os.getenv("TRACE_ENABLED", "1") != "0"
+    TRACE_RETENTION_DAYS: int = int(os.getenv("TRACE_RETENTION_DAYS", 14))
+    TRACE_MAX_ROWS: int       = int(os.getenv("TRACE_MAX_ROWS", 20000))
+
     # RAG 检索配置
     RAG_TOP_K: int = int(os.getenv("RAG_TOP_K", 6))
     RAG_POOL_LIMIT: int = int(os.getenv("RAG_POOL_LIMIT", 500))

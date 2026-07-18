@@ -63,6 +63,19 @@ def create_app() -> Flask:
             from flask import Response
             return Response(status=200)
 
+    # 未捕获异常 → 记入 system_alerts（admin 可见），并返回 500
+    @app.errorhandler(Exception)
+    def handle_uncaught(e):
+        from flask import request, jsonify
+        from werkzeug.exceptions import HTTPException
+        if isinstance(e, HTTPException):
+            return e   # 4xx/预期的 HTTP 错误不算故障
+        import traceback
+        from backend.services.llm_provider import alert
+        alert("API异常", f"{request.method} {request.path}: {type(e).__name__}: {e}\n"
+                         + traceback.format_exc()[-500:])
+        return jsonify({"error": "服务器内部错误，已记录"}), 500
+
     # 前端页面
     @app.get("/app")
     @app.get("/app/")

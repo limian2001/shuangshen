@@ -16,9 +16,30 @@ from typing import Generator, List, Optional
 from backend.core.config import config
 
 
-def alert(tag: str, msg: str):
-    """降级/故障告警日志 — 统一前缀，方便 docker logs | grep ALERT 监控"""
+def alert(tag: str, msg: str, avatar_id: str | None = None):
+    """
+    降级/故障告警 — 打日志（docker logs | grep ALERT）并持久化到 system_alerts
+    供 admin 后台查看。写库失败不影响主流程。
+    自动修剪：保留最近 30 天且最多 5000 条。
+    """
     print(f"⚠️ [ALERT][{tag}] {msg}", flush=True)
+    try:
+        import uuid
+        from backend.db.database import get_db
+        with get_db() as conn:
+            conn.execute(
+                "INSERT INTO system_alerts (id, tag, message, avatar_id) VALUES (?, ?, ?, ?)",
+                (uuid.uuid4().hex, tag, msg[:1000], avatar_id),
+            )
+            # 顺带修剪（廉价操作，命中索引）
+            conn.execute("DELETE FROM system_alerts WHERE created_at < datetime('now', '-30 days')")
+            conn.execute(
+                """DELETE FROM system_alerts WHERE id IN (
+                     SELECT id FROM system_alerts ORDER BY created_at DESC LIMIT -1 OFFSET 5000
+                   )"""
+            )
+    except Exception:
+        pass
 
 
 class LLMProvider:
@@ -61,7 +82,25 @@ class LLMProvider:
         fn = dispatch.get(self.provider)
         if fn is None:
             raise ValueError(f"未知 LLM 提供商: {self.provider}")
-        return fn(system_prompt, messages, max_tokens, temperature)
+
+        from backend.services.trace import trace_event
+        _t0 = time.time()
+        try:
+            reply = fn(system_prompt, messages, max_tokens, temperature)
+            trace_event("llm", {
+                "provider": self.provider, "success": True,
+                "latency_ms": round((time.time() - _t0) * 1000),
+                "reply_preview": (reply or "")[:200],
+                "reply_chars": len(reply or ""),
+            })
+            return reply
+        except Exception as e:
+            trace_event("llm", {
+                "provider": self.provider, "success": False,
+                "latency_ms": round((time.time() - _t0) * 1000),
+                "error": str(e)[:300],
+            })
+            raise
 
     # ─── Anthropic Claude ───────────────────────────────────────
     def _call_anthropic(
@@ -162,6 +201,7 @@ class LLMProvider:
         if not base or not key:
             raise RuntimeError("CLOUDBASE_BASE_URL / CLOUDBASE_API_KEY 未配置")
 
+        from backend.services.trace import trace_event
         full_messages = [{"role": "system", "content": system}] + messages
 
         def _once(mt: int) -> str:
@@ -182,6 +222,15 @@ class LLMProvider:
             )
             with urllib.request.urlopen(req, timeout=90) as resp:
                 data = json.loads(resp.read())
+            usage = data.get("usage") or {}
+            trace_event("llm", {
+                "model": config.CLOUDBASE_MODEL,
+                "tokens": {
+                    "prompt": usage.get("prompt_tokens"),
+                    "completion": usage.get("completion_tokens"),
+                    "reasoning": (usage.get("completion_tokens_details") or {}).get("reasoning_tokens"),
+                },
+            })
             return data["choices"][0]["message"].get("content") or ""
 
         try:
@@ -190,6 +239,7 @@ class LLMProvider:
             content = _once(max(max_tokens, 300) + 500)
             if not content:
                 alert("LLM重试", f"CloudBase 返回空正文(思维链耗尽额度)，扩容至 {max_tokens + 2000} 重试")
+                trace_event("llm", {"retried": True})
                 content = _once(max_tokens + 2000)
             if content:
                 return content
@@ -198,6 +248,8 @@ class LLMProvider:
             # CloudBase 失败（额度耗尽/网关异常）→ 自动回退 DeepSeek 直连
             if config.DEEPSEEK_API_KEY:
                 alert("LLM降级", f"CloudBase 调用失败，回退 DeepSeek 直连: {e}")
+                trace_event("llm", {"fallback_used": "deepseek", "fallback_reason": str(e)[:200],
+                                    "model": config.DEEPSEEK_MODEL})
                 return self._call_deepseek(system, messages, max_tokens, temperature)
             raise
 

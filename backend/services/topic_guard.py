@@ -59,17 +59,32 @@ def get_topic_hints(avatar_id: str, user_message: str) -> str:
             (avatar_id,),
         ).fetchall())
 
+    from backend.services.trace import trace_event
+
     if not topics:
+        trace_event("topic", {"matched": None, "candidates": 0})
         return ""
 
     # 先关键词快速匹配
     for topic in topics:
         keywords = json.loads(topic.get("trigger_keywords", "[]"))
         if _matches_any(user_message, keywords):
+            trace_event("topic", {
+                "matched": topic.get("topic_description") or "、".join(keywords[:3]),
+                "via": "keyword",
+                "strategy": topic.get("strategy", ""),
+                "candidates": len(topics),
+            })
             return _build_hint(topic)
 
     # 再 LLM 语义匹配
-    return _llm_semantic_hint(topics, user_message)
+    hint = _llm_semantic_hint(topics, user_message)
+    trace_event("topic", {
+        "matched": (hint[:60] if hint else None),
+        "via": ("llm_semantic" if hint else None),
+        "candidates": len(topics),
+    })
+    return hint
 
 
 def _build_hint(topic: dict) -> str:

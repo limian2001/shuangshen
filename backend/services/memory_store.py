@@ -203,6 +203,10 @@ def search_memories(
     if top_k is None:
         top_k = config.RAG_TOP_K
 
+    import time as _time
+    from backend.services.trace import trace_event
+    _t0 = _time.time()
+
     # ── 优先：Chroma 向量检索 ──
     try:
         from backend.services.llm_provider import llm, alert
@@ -211,15 +215,25 @@ def search_memories(
         if query_vec:
             results = chroma_query(avatar_id, query_vec, top_k=top_k)
             if results:
+                _rag_count(avatar_id, "vector_hits")
+                trace_event("retrieval", {
+                    "path": "vector", "query": query[:200],
+                    "selected": [{"id": r["id"], "mem_type": r.get("mem_type"),
+                                  "score": round(r.get("score", 0), 4),
+                                  "content": (r.get("content") or "")[:80]} for r in results],
+                    "elapsed_ms": round((_time.time() - _t0) * 1000),
+                })
                 return results
             # results 为空说明该替身在 Chroma 里没有记忆，降级到关键词
         else:
             # embed 返回 None 时 llm.embed 内部已发 EMBED降级 告警，
             # 此处再记录检索层降级事实，方便统计降级频率
-            alert("RAG降级", f"avatar={avatar_id[:8]} 向量不可用，本次检索使用关键词匹配")
+            alert("RAG降级", f"avatar={avatar_id[:8]} 向量不可用，本次检索使用关键词匹配",
+                  avatar_id=avatar_id)
     except Exception as e:
         from backend.services.llm_provider import alert
-        alert("RAG降级", f"avatar={avatar_id[:8]} Chroma 检索异常，降级关键词: {e}")
+        alert("RAG降级", f"avatar={avatar_id[:8]} Chroma 检索异常，降级关键词: {e}",
+              avatar_id=avatar_id)
 
     # ── 降级：SQLite 关键词检索 ──
     with get_db() as conn:
@@ -232,9 +246,40 @@ def search_memories(
         ).fetchall()
 
     if not rows:
+        _rag_count(avatar_id, "empty_results")
+        trace_event("retrieval", {"path": "empty", "query": query[:200],
+                                  "pool_size": 0, "selected": [],
+                                  "elapsed_ms": round((_time.time() - _t0) * 1000)})
         return []
 
-    return _keyword_search(rows, query, top_k)
+    results = _keyword_search(rows, query, top_k)
+    _rag_count(avatar_id, "keyword_fallbacks" if results else "empty_results")
+    trace_event("retrieval", {
+        "path": "keyword" if results else "empty",
+        "query": query[:200], "pool_size": len(rows),
+        "selected": [{"id": r.get("id"), "mem_type": r.get("mem_type"),
+                      "score": round(r.get("_score", 0), 2),
+                      "content": (r.get("content") or "")[:80]} for r in results],
+        "elapsed_ms": round((_time.time() - _t0) * 1000),
+    })
+    return results
+
+
+def _rag_count(avatar_id: str, field: str):
+    """RAG 命中统计（按替身按日累加），失败不影响检索"""
+    if field not in ("vector_hits", "keyword_fallbacks", "empty_results"):
+        return
+    try:
+        with get_db() as conn:
+            conn.execute(
+                f"""INSERT INTO rag_counters (avatar_id, date, {field})
+                    VALUES (?, date('now'), 1)
+                    ON CONFLICT(avatar_id, date)
+                    DO UPDATE SET {field} = {field} + 1""",
+                (avatar_id,),
+            )
+    except Exception:
+        pass
 
 
 
@@ -260,6 +305,7 @@ def _keyword_search(rows, query: str, top_k: int) -> List[dict]:
         if row_dict.get("mem_type") == "opinion":
             score *= 1.3
         if score > 0:
+            row_dict["_score"] = score   # 供 trace 展示
             scored.append((score, row_dict))
 
     scored.sort(key=lambda x: x[0], reverse=True)

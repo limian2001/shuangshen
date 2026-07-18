@@ -170,6 +170,23 @@ def _process_chat(avatar_id, message, want_voice,
     except ValueError as e:
         return jsonify({"error": str(e)}), 404
 
+    # Trace: System Prompt 全文 + 各构成块字数（按【标题】切块统计）
+    try:
+        import re as _re
+        from backend.services.trace import trace_event
+        blocks = {}
+        parts = _re.split(r'(【[^】]{1,20}】)', system_prompt)
+        for i in range(1, len(parts) - 1, 2):
+            blocks[parts[i].strip('【】')] = len(parts[i + 1])
+        trace_event("prompt", {
+            "system_prompt": system_prompt,
+            "total_chars": len(system_prompt),
+            "blocks": blocks,
+            "history_rounds": len(history),
+        })
+    except Exception:
+        pass
+
     # ④ 构建 LLM 消息
     messages = history + [{"role": "user", "content": message}]
     print(
@@ -191,10 +208,14 @@ def _process_chat(avatar_id, message, want_voice,
         return jsonify({"error": f"LLM 调用失败: {str(e)}"}), 500
 
     # ⑤ 存储对话历史
-    _save_message(avatar_id, g.user_id, "user", message,
-                  msg_id=user_msg_id, msg_type=msg_type,
-                  audio_path=audio_path, duration=duration)
+    saved_user_msg_id = _save_message(avatar_id, g.user_id, "user", message,
+                                      msg_id=user_msg_id, msg_type=msg_type,
+                                      audio_path=audio_path, duration=duration)
     _save_message(avatar_id, g.user_id, "assistant", reply)
+
+    # ⑤b 落库对话链路 Trace（失败不影响主流程）
+    from backend.services.trace import save_trace
+    save_trace(saved_user_msg_id, avatar_id, g.user_id)
 
     # ⑥ 构建响应
     response: dict = {
@@ -269,15 +290,17 @@ def _receiver_can_chat(avatar_id: str, user_id: str) -> bool:
 
 def _save_message(avatar_id: str, receiver_id: str, role: str, content: str,
                   msg_id: str | None = None, msg_type: str = "text",
-                  audio_path: str | None = None, duration: int = 0):
+                  audio_path: str | None = None, duration: int = 0) -> str:
+    mid = msg_id or new_id()
     with get_db() as conn:
         conn.execute(
             """INSERT INTO chat_messages (id, avatar_id, receiver_id, role, content,
                                           msg_type, audio_path, duration)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-            (msg_id or new_id(), avatar_id, receiver_id, role, content,
+            (mid, avatar_id, receiver_id, role, content,
              msg_type, audio_path, duration),
         )
+    return mid
 
 
 def _get_recent_history(avatar_id: str, receiver_id: str, limit: int) -> list[dict]:

@@ -180,6 +180,43 @@ def update_avatar(avatar_id):
     return jsonify({"ok": True})
 
 
+# 引用 avatars(id) 的全部子表 + 无外键但按替身归属的运维表。
+# ⚠️ 新增引用 avatars 的表时必须同步加进这里，否则硬删除会触发
+#    FOREIGN KEY constraint failed（2026-07 曾因 voice_samples 等漏删导致线上 500）
+AVATAR_CHILD_TABLES = [
+    # 有外键（必须先删，顺序在 avatars 之前）
+    "memories", "chat_messages", "raw_uploads", "ingest_jobs",
+    "sensitive_topics", "avatar_receivers",
+    "voice_samples", "takeover_sessions",
+    "avatar_feature_unlocks", "chat_content_unlocks", "image_cache",
+    # 无外键的运维/统计表（顺带清理）
+    "chat_traces", "rag_counters", "system_alerts",
+]
+
+
+def purge_avatar_rows(conn, avatar_id: str):
+    """删除某替身在所有子表中的行（不含 avatars 本体）。admin 删除用户时复用。"""
+    for table in AVATAR_CHILD_TABLES:
+        try:
+            conn.execute(f"DELETE FROM {table} WHERE avatar_id=?", (avatar_id,))
+        except Exception as e:
+            # 表不存在等极端情况不阻断删除
+            print(f"[DELETE] 清理 {table} 失败（继续）: {e}")
+
+
+def purge_avatar_files(avatar_id: str):
+    """删除该替身的本地媒体文件（声音样本 + 语音消息音频），失败不阻断"""
+    import shutil
+    from backend.core.config import config as _cfg
+    for sub in ("voice_samples", "chat_voice"):
+        d = _cfg.UPLOAD_FOLDER / sub / avatar_id
+        try:
+            if d.exists():
+                shutil.rmtree(d)
+        except Exception as e:
+            print(f"[DELETE] 清理文件目录 {d} 失败（继续）: {e}")
+
+
 @avatars_bp.delete("/<avatar_id>")
 @require_auth
 def delete_avatar(avatar_id):
@@ -200,15 +237,13 @@ def delete_avatar(avatar_id):
     except Exception as e:
         print(f"[DELETE] Chroma 清理失败（继续删除）: {e}")
 
-    # 硬删除所有关联数据 + 替身本体
+    # 硬删除所有关联数据 + 替身本体（子表清单见 AVATAR_CHILD_TABLES）
     with get_db() as conn:
-        conn.execute("DELETE FROM memories        WHERE avatar_id=?", (avatar_id,))
-        conn.execute("DELETE FROM chat_messages   WHERE avatar_id=?", (avatar_id,))
-        conn.execute("DELETE FROM raw_uploads     WHERE avatar_id=?", (avatar_id,))
-        conn.execute("DELETE FROM ingest_jobs     WHERE avatar_id=?", (avatar_id,))
-        conn.execute("DELETE FROM sensitive_topics WHERE avatar_id=?", (avatar_id,))
-        conn.execute("DELETE FROM avatar_receivers WHERE avatar_id=?", (avatar_id,))
-        conn.execute("DELETE FROM avatars          WHERE id=?",        (avatar_id,))
+        purge_avatar_rows(conn, avatar_id)
+        conn.execute("DELETE FROM avatars WHERE id=?", (avatar_id,))
+
+    # 清理本地媒体文件（声音样本 / 语音消息）
+    purge_avatar_files(avatar_id)
 
     print(f"[DELETE] avatar={avatar_id[:8]} 及全部数据已彻底删除")
     return jsonify({"ok": True})
