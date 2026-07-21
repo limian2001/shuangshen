@@ -99,6 +99,19 @@ class Config:
     # 声音复刻：控制台购买音色后获得的 S_ 开头 speaker_id，多个用英文逗号分隔
     VOLC_SPEAKER_IDS: str   = os.getenv("VOLC_SPEAKER_IDS", "")
 
+    # ── 声音复刻供应商（aliyun=阿里云百炼 CosyVoice：复刻免费/1000配额/支持方言）──
+    TTS_PROVIDER: str        = os.getenv("TTS_PROVIDER", "aliyun")   # aliyun | volc
+    DASHSCOPE_API_KEY: str   = os.getenv("DASHSCOPE_API_KEY", "")
+    DASHSCOPE_WORKSPACE: str = os.getenv("DASHSCOPE_WORKSPACE", "")  # 百炼业务空间 ID
+    COSYVOICE_MODEL: str     = os.getenv("COSYVOICE_MODEL", "cosyvoice-v3.5-flash")
+    # 复刻接口要求公网音频 URL，用本站域名 + 一次性签名 token 提供
+    PUBLIC_BASE_URL: str     = os.getenv("PUBLIC_BASE_URL", "")
+
+    # 声音复刻计费
+    VOICE_CLONE_COST: int   = int(os.getenv("VOICE_CLONE_COST", 1000))   # 言己币
+    VOICE_CLONE_FREE: bool  = os.getenv("VOICE_CLONE_FREE", "1") != "0"  # 限时免费开关
+    VOICE_MAX_PER_USER: int = 2   # self 1 + other 1
+
     # 图片缓存（仅缩略图，超上限时按relevance_score淘汰）
     IMAGE_THUMB_MAX_WIDTH: int = int(os.getenv("IMAGE_THUMB_MAX_WIDTH", 300))
     IMAGE_MAX_PER_AVATAR: int  = int(os.getenv("IMAGE_MAX_PER_AVATAR", 200))

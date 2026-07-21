@@ -321,6 +321,23 @@ def _run_migrations(conn: sqlite3.Connection):
         )""",
         "CREATE INDEX IF NOT EXISTS idx_alerts_created ON system_alerts(created_at)",
         "CREATE INDEX IF NOT EXISTS idx_alerts_tag ON system_alerts(tag)",
+        # v1.5: 声音复刻归属账号（不再挂在替身下，可跨替身复用）
+        """CREATE TABLE IF NOT EXISTS user_voices (
+            id          TEXT PRIMARY KEY,
+            user_id     TEXT NOT NULL REFERENCES users(id),
+            voice_kind  TEXT NOT NULL,             -- self | other（各限 1 个）
+            name        TEXT DEFAULT '',           -- 展示名，如「我的声音」「妈妈」
+            provider    TEXT DEFAULT 'aliyun',     -- aliyun | volc（兼容旧数据）
+            voice_id    TEXT DEFAULT '',           -- 供应商返回的音色 ID
+            status      TEXT DEFAULT 'training',   -- training | ready | failed
+            sample_path TEXT DEFAULT '',
+            consent_at  TEXT DEFAULT NULL,         -- 复刻他人声音的授权确认时间（存证）
+            last_used_at TEXT DEFAULT NULL,        -- 防供应商一年未用自动清理
+            created_at  TEXT DEFAULT (datetime('now'))
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_user_voices_user ON user_voices(user_id)",
+        # 替身绑定的账号级声音（NULL/空 = 关闭，不显示小喇叭）
+        "ALTER TABLE avatars ADD COLUMN user_voice_id TEXT DEFAULT NULL",
         # v1.4: 对话链路 Trace（话题检测/记忆检索/Prompt/LLM 全过程，admin 可查）
         """CREATE TABLE IF NOT EXISTS chat_traces (
             id          TEXT PRIMARY KEY,

@@ -337,7 +337,10 @@ def tts_synthesize(
     text = text[:500]
 
     if voice_id:
-        # 使用声音复刻的 speaker_id 合成（自动探测可用路径）
+        # 阿里云音色（CosyVoice 复刻返回的 voice_id）走阿里云；
+        # S_ 开头为火山旧音色，继续走火山（兼容存量数据）
+        if not voice_id.startswith("S_") and config.DASHSCOPE_API_KEY:
+            return aliyun_tts(text, voice_id, speed)
         return _tts_clone_multi(text, voice_id, speed)
 
     # 默认音色走 seed-tts-2.0 WebSocket
@@ -470,3 +473,98 @@ def voice_clone_status(speaker_id: str) -> dict:
 def _rand_id() -> str:
     import uuid
     return uuid.uuid4().hex
+
+
+# ──────────────────────────────────────────────────────────────────────
+# 阿里云百炼 CosyVoice — 声音复刻（复刻免费 / 1000 配额 / 支持方言）
+# ──────────────────────────────────────────────────────────────────────
+
+def _dashscope_base() -> str:
+    ws = config.DASHSCOPE_WORKSPACE
+    if not ws:
+        raise RuntimeError("DASHSCOPE_WORKSPACE 未配置（百炼业务空间 ID）")
+    return f"https://{ws}.cn-beijing.maas.aliyuncs.com"
+
+
+def _dashscope_post(path: str, body: dict, timeout: int = 60) -> dict:
+    key = config.DASHSCOPE_API_KEY
+    if not key:
+        raise RuntimeError("DASHSCOPE_API_KEY 未配置")
+    req = urllib.request.Request(
+        _dashscope_base() + path,
+        data=json.dumps(body, ensure_ascii=False).encode(),
+        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return json.loads(resp.read())
+    except urllib.error.HTTPError as e:
+        body_err = e.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"阿里云语音接口错误 {e.code}: {body_err[:300]}") from e
+
+
+def aliyun_voice_clone(sample_url: str, prefix: str = "yanji") -> str:
+    """
+    CosyVoice 声音复刻：传入公网可访问的音频 URL，返回 voice_id。
+    复刻本身免费；音色绑定 target_model，合成时必须用同一模型。
+    """
+    data = _dashscope_post("/api/v1/services/audio/tts/customization", {
+        "model": "voice-enrollment",
+        "input": {
+            "action": "create_voice",
+            "target_model": config.COSYVOICE_MODEL,
+            "prefix": (prefix or "yanji")[:10],
+            "url": sample_url,
+        },
+    })
+    vid = (data.get("output") or {}).get("voice_id", "")
+    if not vid:
+        raise RuntimeError(f"复刻失败，未返回 voice_id: {str(data)[:300]}")
+    return vid
+
+
+def aliyun_voice_delete(voice_id: str) -> None:
+    """删除音色释放配额（失败不抛）"""
+    try:
+        _dashscope_post("/api/v1/services/audio/tts/customization", {
+            "model": "voice-enrollment",
+            "input": {"action": "delete_voice", "voice_id": voice_id},
+        }, timeout=20)
+    except Exception as e:
+        print(f"[TTS] 阿里云音色删除失败（忽略）: {e}")
+
+
+def aliyun_tts(text: str, voice_id: str, speed: float = 1.0) -> bytes:
+    """用复刻音色合成语音（非流式 HTTP），返回音频字节。"""
+    key = config.DASHSCOPE_API_KEY
+    if not key:
+        raise RuntimeError("DASHSCOPE_API_KEY 未配置")
+    body = {
+        "model": config.COSYVOICE_MODEL,
+        "input": {"text": text[:500], "voice": voice_id},
+        "parameters": {"format": "mp3", "rate": round(speed, 2)},
+    }
+    req = urllib.request.Request(
+        _dashscope_base() + "/api/v1/services/aigc/multimodal-generation/generation",
+        data=json.dumps(body, ensure_ascii=False).encode(),
+        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            data = json.loads(resp.read())
+    except urllib.error.HTTPError as e:
+        raise RuntimeError(
+            f"阿里云 TTS 错误 {e.code}: {e.read().decode('utf-8', errors='replace')[:300]}"
+        ) from e
+
+    out = data.get("output") or {}
+    # 返回可能是 audio.url（下载）或 audio.data（base64）
+    audio = out.get("audio") or {}
+    if audio.get("url"):
+        with urllib.request.urlopen(audio["url"], timeout=60) as r:
+            return r.read()
+    if audio.get("data"):
+        return base64.b64decode(audio["data"])
+    raise RuntimeError(f"阿里云 TTS 未返回音频: {str(data)[:300]}")

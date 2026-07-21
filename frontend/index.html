@@ -2,8 +2,8 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="ss-build" content="20260716-9">
-<script>const SS_BUILD = '20260716-9'; console.log('ss-build: ' + SS_BUILD);</script>
+<meta name="ss-build" content="20260718-1">
+<script>const SS_BUILD = '20260718-1'; console.log('ss-build: ' + SS_BUILD);</script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>替身 · Shuangshen</title>
 <style>
@@ -579,6 +579,10 @@ body.is-mobile .row .field   { width: 100%; }
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 12V22H4V12"/><path d="M22 7H2v5h20V7z"/><path d="M12 22V7"/><path d="M12 7H7.5a2.5 2.5 0 010-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 000-5C13 2 12 7 12 7z"/></svg>
         绑定的替身
       </div>
+      <div class="nav-item" onclick="showPage('myvoices')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>
+        我的声音
+      </div>
       <div class="nav-item" onclick="showPage('topics')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
         全局话题预设
@@ -843,6 +847,79 @@ body.is-mobile .row .field   { width: 100%; }
     </div>
 
     <!-- Page: sensitive topics (global) -->
+    <!-- Page: 我的声音（账号级复刻，跨替身共用） -->
+    <div id="page-myvoices" class="page" style="display:none">
+      <div class="page-header">
+        <h2>我的声音</h2>
+        <p>复刻的声音属于你的账号，可应用到任意替身；删除替身不会影响声音。每个账号最多 1 个本人声音 + 1 个他人声音。</p>
+      </div>
+
+      <div id="myvoices-list"></div>
+
+      <div class="card" id="voice-create-card" style="margin-top:16px">
+        <div class="card-title">复刻新声音 <span id="voice-cost-tag" style="font-size:11px;font-weight:400"></span></div>
+
+        <div class="field">
+          <label>声音归属</label>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button type="button" class="btn btn-secondary btn-sm vk-btn active" data-kind="self" onclick="selectVoiceKind('self')">🙋 复刻我自己</button>
+            <button type="button" class="btn btn-secondary btn-sm vk-btn" data-kind="other" onclick="selectVoiceKind('other')">👤 复刻他人</button>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>声音名称</label>
+          <input type="text" id="voice-name" placeholder="如：我的声音 / 妈妈" maxlength="20">
+        </div>
+
+        <div class="field">
+          <label>提供声音样本（10~60 秒清晰人声，无背景音乐）</label>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+            <button type="button" class="btn btn-primary btn-sm" id="voice-rec-btn" onclick="toggleVoiceRecord()">🎙️ 开始录音</button>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('voice-file-input').click()">📁 上传音频文件</button>
+            <input type="file" id="voice-file-input" accept=".mp3,.wav,.m4a,.aac" style="display:none" onchange="onVoiceFilePicked(this)">
+          </div>
+          <div id="voice-rec-meter" style="display:none;align-items:center;gap:10px;margin-bottom:8px">
+            <span id="voice-rec-timer" style="font-family:monospace;font-size:15px;font-weight:700;color:var(--purple)">0:00</span>
+            <div style="flex:1;height:6px;background:var(--bg);border-radius:3px;overflow:hidden">
+              <div id="voice-rec-bar" style="height:100%;width:0;background:var(--purple);transition:width .1s"></div>
+            </div>
+          </div>
+          <div id="voice-sample-info" style="font-size:13px;color:var(--text-3)">尚未提供样本</div>
+          <div id="voice-sample-error" style="font-size:13px;color:#dc2626;font-weight:600;margin-top:6px;display:none"></div>
+          <audio id="voice-sample-preview" controls style="display:none;width:100%;margin-top:8px"></audio>
+        </div>
+
+        <button class="btn btn-primary btn-full" id="voice-submit-btn" onclick="submitVoiceClone()" disabled>开始复刻</button>
+      </div>
+    </div>
+
+    <!-- 复刻他人声音 — 授权确认弹窗 -->
+    <div class="modal-backdrop" id="consent-modal" style="display:none">
+      <div class="modal" style="max-width:420px">
+        <div class="modal-header"><h3>声音复刻授权确认</h3></div>
+        <div class="modal-body" style="font-size:13.5px;line-height:1.8;color:var(--text-2)">
+          <p style="margin-bottom:10px">复刻他人声音前，请确认：</p>
+          <label style="display:flex;gap:8px;align-items:flex-start;margin-bottom:10px;cursor:pointer">
+            <input type="checkbox" id="consent-1" style="margin-top:4px" onchange="updateConsentBtn()">
+            <span>该声音的权利人<b>已同意</b>我使用其声音进行 AI 复刻，我已获得明确授权。</span>
+          </label>
+          <label style="display:flex;gap:8px;align-items:flex-start;margin-bottom:10px;cursor:pointer">
+            <input type="checkbox" id="consent-2" style="margin-top:4px" onchange="updateConsentBtn()">
+            <span>因使用该声音产生的一切<b>法律责任由我本人承担</b>，与本产品无关。</span>
+          </label>
+          <label style="display:flex;gap:8px;align-items:flex-start;cursor:pointer">
+            <input type="checkbox" id="consent-3" style="margin-top:4px" onchange="updateConsentBtn()">
+            <span>如复刻<b>已故人士</b>的声音，我确认已征得其近亲属同意，并遵守当地法律法规。</span>
+          </label>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary btn-sm" onclick="closeConsentModal()">取消</button>
+          <button class="btn btn-primary btn-sm" id="consent-ok-btn" onclick="confirmConsent()" disabled>确认并继续</button>
+        </div>
+      </div>
+    </div>
+
     <div id="page-topics" class="page" style="display:none">
       <div class="page-header">
         <h2>全局话题预设</h2>
@@ -1065,82 +1142,29 @@ body.is-mobile .row .field   { width: 100%; }
     <div id="page-voice" class="page" style="display:none">
       <div class="page-header">
         <h2>替身声音</h2>
-        <p>上传或录制 TA 的真实声音，让替身用 TA 的音色说话。</p>
+        <p>选择一个已复刻的声音，替身回复时就能用该音色朗读（默认关闭）。声音在「我的声音」中统一复刻和管理，可跨替身共用。</p>
       </div>
 
-      <!-- 克隆状态 -->
-      <div class="card" id="voice-clone-status-card">
-        <div class="card-title">声音克隆状态</div>
-        <div id="voice-clone-status-text" style="font-size:13px;color:var(--text-2)">加载中...</div>
-      </div>
-
-      <!-- 录音 / 上传 -->
-      <div class="card" style="margin-top:14px">
-        <div class="card-title">
-          添加声音样本
-          <span id="voice-count-badge" style="font-size:11px;color:var(--text-3);font-weight:normal;margin-left:6px">0 / 5</span>
-        </div>
-        <div style="font-size:12px;color:var(--text-3);margin-bottom:14px;line-height:1.7">
-          单段至少 <strong>10 秒</strong>，背景安静、发音清晰。总时长建议 1 分钟以上，最多 5 段。
-        </div>
-
-        <!-- 标签切换 -->
-        <div class="voice-tabs">
-          <button class="voice-tab active" id="tab-record" onclick="switchVoiceTab('record')">🎙️ 录音</button>
-          <button class="voice-tab" id="tab-upload" onclick="switchVoiceTab('upload')">📁 上传文件</button>
-        </div>
-
-        <!-- 录音面板 -->
-        <div id="voice-panel-record">
-          <div class="voice-rec-area">
-            <div class="voice-rec-hint" id="voice-rec-hint">点击按钮开始录音</div>
-            <canvas id="voice-level-canvas" width="280" height="44" style="display:none;border-radius:8px;background:#f0effc"></canvas>
-            <div class="voice-rec-timer" id="voice-rec-timer" style="display:none">0:00</div>
-            <button class="voice-rec-btn" id="voice-rec-btn" onclick="toggleRecording()">
-              <span>⏺</span>
-              <span id="voice-rec-label">开始录音</span>
-            </button>
-          </div>
-          <div id="voice-quality-result" style="display:none;margin-top:12px"></div>
-        </div>
-
-        <!-- 上传文件面板 -->
-        <div id="voice-panel-upload" style="display:none">
-          <div style="font-size:13px;color:var(--text-2);margin-bottom:10px">支持 MP3 / WAV / M4A，每段至少 10 秒</div>
-          <label class="btn btn-secondary btn-sm" style="cursor:pointer;display:inline-flex;align-items:center;gap:6px">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-            选择声音文件
-            <input type="file" id="voice-sample-file" accept=".mp3,.wav,.m4a,.aac" style="display:none" onchange="handleVoiceFileSelect(this)">
-          </label>
-          <div id="voice-file-check" style="display:none;margin-top:12px"></div>
-        </div>
-
-        <!-- 语言选择 -->
+      <div class="card">
+        <div class="card-title">使用的声音</div>
+        <div id="avatar-voice-options" style="font-size:13px;color:var(--text-3)">加载中…</div>
         <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
-          <label style="font-size:12px;color:var(--text-3);margin-right:8px">声音语言：</label>
-          <select id="voice-lang-select" style="padding:4px 10px;border:1px solid var(--border-md);border-radius:6px;font-size:13px">
-            <option value="zh">普通话</option>
-            <option value="yue">粤语</option>
-            <option value="en">英语</option>
-          </select>
+          <div style="font-size:12px;color:var(--text-3);line-height:1.7">
+            💡 开启后，该替身的每条回复下方会出现 🔊 小喇叭，点击即用此音色朗读。<br>
+            还没有复刻声音？前往
+            <a href="javascript:showPage('myvoices')" style="color:var(--purple);font-weight:600">我的声音</a>
+            创建（每账号最多 1 个本人 + 1 个他人）。
+          </div>
         </div>
-
-        <!-- 已上传样本列表 -->
-        <div class="voice-sample-list" id="voice-sample-list" style="margin-top:10px"></div>
       </div>
 
-      <!-- 试听效果（克隆成功后解锁） -->
-      <div class="card" style="margin-top:14px">
-        <div class="card-title">试听克隆效果</div>
-        <div id="voice-preview-locked" class="voice-preview-locked">声音克隆训练完成后可试听</div>
-        <div id="voice-preview-active" style="display:none">
-          <div style="font-size:13px;color:var(--text-2);margin-bottom:10px">输入一句话，用 TA 的克隆声音合成</div>
-          <div style="display:flex;gap:8px">
-            <input type="text" id="tts-preview-text" placeholder="例：你好，最近还好吗？" style="flex:1;padding:8px 12px;border:1px solid var(--border-md);border-radius:8px;font-size:13px">
-            <button class="btn btn-primary btn-sm" onclick="previewTTS()">合成试听</button>
-          </div>
-          <div id="tts-preview-player" style="margin-top:10px"></div>
+      <div class="card" style="margin-top:14px" id="avatar-voice-preview-card">
+        <div class="card-title">试听</div>
+        <div style="display:flex;gap:8px">
+          <input type="text" id="tts-preview-text" placeholder="例：你好，最近还好吗？" style="flex:1;padding:8px 12px;border:1px solid var(--border-md);border-radius:8px;font-size:13px">
+          <button class="btn btn-primary btn-sm" onclick="previewTTS()">合成试听</button>
         </div>
+        <div id="tts-preview-player" style="margin-top:10px"></div>
       </div>
     </div>
 
@@ -1611,7 +1635,7 @@ function showPage(page) {
   document.getElementById('topbar-back-btn').style.display = 'none';
   document.getElementById('mobile-subnav').classList.remove('active');
 
-  const pages = ['avatars','received','topics','chat','memories','ingest','identity','share'];
+  const pages = ['avatars','received','topics','myvoices','chat','memories','ingest','identity','share'];
   pages.forEach(p => {
     const el = document.getElementById('page-' + p);
     if (el) el.style.display = 'none';
@@ -1622,7 +1646,7 @@ function showPage(page) {
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   const navItems = document.querySelectorAll('.nav-item');
 
-  const titleMap = { avatars:'我的替身', received:'绑定的替身', topics:'话题预设' };
+  const titleMap = { avatars:'我的替身', received:'绑定的替身', topics:'话题预设', myvoices:'我的声音' };
   document.getElementById('mobile-page-title').textContent = titleMap[page] || '替身';
 
   if (page === 'avatars') {
@@ -1633,8 +1657,12 @@ function showPage(page) {
     navItems[1]?.classList.add('active');
     document.getElementById('avatar-sidebar-section').style.display = 'none';
     loadReceived();
-  } else if (page === 'topics') {
+  } else if (page === 'myvoices') {
     navItems[2]?.classList.add('active');
+    document.getElementById('avatar-sidebar-section').style.display = 'none';
+    loadMyVoices();
+  } else if (page === 'topics') {
+    navItems[3]?.classList.add('active');
     document.getElementById('avatar-sidebar-section').style.display = 'none';
     loadTopics();
   }
@@ -3692,19 +3720,248 @@ function _sttGetMime() {
 function _getSupportedMime() { return _sttGetMime(); }
 
 
+// ─── 我的声音（账号级复刻） ──────────────────────────────────
+let _voiceKind = 'self';
+let _voiceBlob = null, _voiceFileName = '';
+let _voiceConsent = false;
+const _vrec = { mr: null, chunks: [], stream: null, timer: null, startMs: 0 };
+
+async function loadMyVoices() {
+  if (!requireLogin()) return;
+  const d = await api('GET', '/api/voices');
+  if (!d) return;
+
+  const tag = document.getElementById('voice-cost-tag');
+  if (tag) tag.innerHTML = d.free
+    ? '<span style="color:#16a34a">限时免费</span>'
+    : `<span style="color:var(--text-3)">${d.cost} 言己币 / 次（余额 ${d.balance}）</span>`;
+
+  const el = document.getElementById('myvoices-list');
+  el.innerHTML = d.voices.length ? d.voices.map(v => {
+    const st = { ready: '<span style="color:#16a34a">✓ 可用</span>',
+                 training: '<span style="color:#d97706">训练中…</span>',
+                 failed: '<span style="color:#dc2626">复刻失败</span>' }[v.status] || v.status;
+    return `
+    <div class="card" style="margin-bottom:10px">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <div style="font-size:26px">${v.voice_kind === 'self' ? '🙋' : '👤'}</div>
+        <div style="flex:1;min-width:140px">
+          <div style="font-weight:600;font-size:14px">${esc(v.name)}
+            <span style="font-size:11px;color:var(--text-3);font-weight:400">· ${v.voice_kind === 'self' ? '本人' : '他人'}</span>
+          </div>
+          <div style="font-size:12px;color:var(--text-3);margin-top:2px">
+            ${st} · 已应用到 ${v.bound_avatars} 个替身${v.consent_at ? ' · 已授权确认' : ''}
+          </div>
+        </div>
+        <div style="display:flex;gap:6px">
+          ${v.status === 'ready' ? `<button class="btn btn-primary btn-sm" onclick="applyVoiceAll('${v.id}')">应用到所有替身</button>` : ''}
+          <button class="btn btn-secondary btn-sm" onclick="deleteMyVoice('${v.id}','${esc(v.name)}')">删除</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('') : '<div class="empty"><p>还没有复刻声音，在下方创建第一个</p></div>';
+
+  // 达到上限时隐藏创建卡片
+  const kinds = d.voices.map(v => v.voice_kind);
+  const full = kinds.includes('self') && kinds.includes('other');
+  document.getElementById('voice-create-card').style.display = full ? 'none' : 'block';
+  if (!full) {
+    // 已有的类型禁用
+    document.querySelectorAll('.vk-btn').forEach(b => {
+      const has = kinds.includes(b.dataset.kind);
+      b.disabled = has;
+      b.style.opacity = has ? '.4' : '';
+    });
+    if (kinds.includes(_voiceKind)) selectVoiceKind(kinds.includes('self') ? 'other' : 'self');
+  }
+}
+
+function selectVoiceKind(kind) {
+  _voiceKind = kind;
+  _voiceConsent = false;
+  document.querySelectorAll('.vk-btn').forEach(b => b.classList.toggle('active', b.dataset.kind === kind));
+  document.querySelectorAll('.vk-btn').forEach(b => {
+    b.style.background = b.dataset.kind === kind ? 'var(--purple)' : '';
+    b.style.color = b.dataset.kind === kind ? '#fff' : '';
+  });
+  const nameEl = document.getElementById('voice-name');
+  if (nameEl && !nameEl.value) nameEl.value = kind === 'self' ? '我的声音' : '';
+}
+
+// ── 录音 ──
+async function toggleVoiceRecord() {
+  const btn = document.getElementById('voice-rec-btn');
+  if (_vrec.mr && _vrec.mr.state === 'recording') {
+    _vrec.mr.stop();
+    return;
+  }
+  try {
+    _vrec.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    _vrec.chunks = [];
+    _vrec.mr = new MediaRecorder(_vrec.stream);
+    _vrec.mr.ondataavailable = e => { if (e.data.size) _vrec.chunks.push(e.data); };
+    _vrec.mr.onstop = async () => {
+      clearInterval(_vrec.timer);
+      _vrec.stream.getTracks().forEach(t => t.stop());
+      document.getElementById('voice-rec-meter').style.display = 'none';
+      btn.textContent = '🎙️ 开始录音';
+      const raw = new Blob(_vrec.chunks, { type: _vrec.mr.mimeType || 'audio/webm' });
+      const secs = Math.round((Date.now() - _vrec.startMs) / 1000);
+      // 转 WAV 上传（供应商不支持 webm）
+      try {
+        _voiceBlob = await _sttBlobToWav(raw, 24000);
+        _voiceFileName = 'voice_' + Date.now() + '.wav';
+      } catch (e) {
+        _voiceBlob = raw; _voiceFileName = 'voice.webm';
+      }
+      _checkVoiceSample(secs);
+    };
+    _vrec.mr.start();
+    _vrec.startMs = Date.now();
+    btn.textContent = '⏹ 停止录音';
+    document.getElementById('voice-rec-meter').style.display = 'flex';
+    _vrec.timer = setInterval(() => {
+      const s = Math.round((Date.now() - _vrec.startMs) / 1000);
+      document.getElementById('voice-rec-timer').textContent =
+        `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`;
+      document.getElementById('voice-rec-bar').style.width = Math.min(100, s/60*100) + '%';
+      if (s >= 60) _vrec.mr.stop();   // 60 秒自动停止
+    }, 200);
+  } catch (e) {
+    toast('无法访问麦克风：' + (e.message || e), 'error');
+  }
+}
+
+// ── 文件上传 ──
+async function onVoiceFilePicked(input) {
+  const f = input.files[0];
+  if (!f) return;
+  input.value = '';
+  _voiceBlob = f;
+  _voiceFileName = f.name;
+  // 读时长做校验
+  let secs = 0;
+  try {
+    const buf = await f.arrayBuffer();
+    const AC = window.AudioContext || window.webkitAudioContext;
+    const ctx = new AC();
+    const dec = await ctx.decodeAudioData(buf.slice(0));
+    secs = Math.round(dec.duration);
+    ctx.close();
+  } catch (e) { secs = -1; }
+  _checkVoiceSample(secs);
+}
+
+// ── 样本校验（不合格红字提示重传）──
+function _checkVoiceSample(secs) {
+  const info = document.getElementById('voice-sample-info');
+  const err  = document.getElementById('voice-sample-error');
+  const btn  = document.getElementById('voice-submit-btn');
+  const prev = document.getElementById('voice-sample-preview');
+  err.style.display = 'none';
+  const mb = (_voiceBlob.size / 1048576).toFixed(2);
+
+  let problem = '';
+  if (_voiceBlob.size > 10 * 1048576) problem = `文件 ${mb}MB 超过 10MB 上限，请裁剪或压缩后重新上传`;
+  else if (secs >= 0 && secs < 10) problem = `音频仅 ${secs} 秒，需要至少 10 秒清晰人声，请重新录制或上传`;
+  else if (secs > 60) problem = `音频 ${secs} 秒超过 60 秒上限，请裁剪到 10~60 秒后重新上传`;
+
+  prev.src = URL.createObjectURL(_voiceBlob);
+  prev.style.display = 'block';
+
+  if (problem) {
+    err.textContent = '⚠️ ' + problem;
+    err.style.display = 'block';
+    info.textContent = `已选择：${_voiceFileName}（${mb}MB${secs > 0 ? ' · ' + secs + '秒' : ''}）`;
+    btn.disabled = true;
+    _voiceBlob = null;
+    return;
+  }
+  info.innerHTML = `✅ 样本就绪：${esc(_voiceFileName)}（${mb}MB${secs > 0 ? ' · ' + secs + '秒' : ''}）`;
+  btn.disabled = false;
+}
+
+// ── 授权弹窗 ──
+function updateConsentBtn() {
+  const all = ['consent-1','consent-2','consent-3'].every(id => document.getElementById(id).checked);
+  document.getElementById('consent-ok-btn').disabled = !all;
+}
+function closeConsentModal() { document.getElementById('consent-modal').style.display = 'none'; }
+function confirmConsent() {
+  _voiceConsent = true;
+  closeConsentModal();
+  _doVoiceClone();
+}
+
+// ── 提交复刻 ──
+async function submitVoiceClone() {
+  if (!requireLogin()) return;
+  if (!_voiceBlob) return toast('请先录制或上传声音样本', 'error');
+  if (_voiceKind === 'other' && !_voiceConsent) {
+    ['consent-1','consent-2','consent-3'].forEach(id => document.getElementById(id).checked = false);
+    updateConsentBtn();
+    document.getElementById('consent-modal').style.display = 'flex';
+    return;
+  }
+  _doVoiceClone();
+}
+
+async function _doVoiceClone() {
+  const btn = document.getElementById('voice-submit-btn');
+  btn.disabled = true; btn.textContent = '复刻中，请稍候…';
+  const fd = new FormData();
+  fd.append('audio', _voiceBlob, _voiceFileName || 'sample.wav');
+  fd.append('kind', _voiceKind);
+  fd.append('name', document.getElementById('voice-name').value.trim() || (_voiceKind === 'self' ? '我的声音' : '他人声音'));
+  if (_voiceKind === 'other') fd.append('consent', '1');
+
+  try {
+    const resp = await fetch(API + '/api/voices', {
+      method: 'POST', headers: { Authorization: 'Bearer ' + token }, body: fd,
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || '复刻失败');
+    toast('🎉 声音复刻成功！可点击「应用到所有替身」启用', 'success');
+    _voiceBlob = null; _voiceConsent = false;
+    document.getElementById('voice-sample-info').textContent = '尚未提供样本';
+    document.getElementById('voice-sample-preview').style.display = 'none';
+    loadMyVoices();
+  } catch (e) {
+    toast('复刻失败：' + e.message, 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = '开始复刻';
+  }
+}
+
+async function applyVoiceAll(voiceId) {
+  const res = await api('POST', `/api/voices/${voiceId}/apply-all`);
+  if (res?.ok) {
+    toast(`已应用到 ${res.applied} 个替身，对话中会出现小喇叭`, 'success');
+    loadMyVoices();
+  }
+}
+
+async function deleteMyVoice(voiceId, name) {
+  if (!confirm(`确认删除声音「${name}」？\n使用该声音的替身将恢复为无声音状态。`)) return;
+  const res = await api('DELETE', '/api/voices/' + voiceId);
+  if (res?.ok) { toast('已删除', 'success'); loadMyVoices(); }
+}
+
 // ─── TTS 播放 ────────────────────────────────────────────────
 let _avatarHasVoice = false;
 
 async function checkAvatarVoice() {
   if (!currentAvatar?.id) return;
-  // 接收者：直接从替身数据判断（不调用创建者专属接口，否则会触发 403 toast）
-  if (currentAvatar._isReceived) {
-    _avatarHasVoice = !!currentAvatar.voice_model_id;
+  // 统一走替身详情的 has_voice（账号级复刻声就绪且已绑定才为 true）
+  // 接收者也适用，无需调用创建者专属接口
+  if (typeof currentAvatar.has_voice === 'boolean') {
+    _avatarHasVoice = currentAvatar.has_voice;
     return;
   }
   try {
-    const res = await api('GET', '/api/media/voice-status/' + currentAvatar.id);
-    _avatarHasVoice = (res?.clone_status?.status === 'success') && !!res?.clone_status?.voice_id;
+    const res = await api('GET', '/api/avatars/' + currentAvatar.id);
+    _avatarHasVoice = !!res?.has_voice;
+    if (res) currentAvatar.has_voice = !!res.has_voice;
   } catch (e) {
     _avatarHasVoice = false;
   }
@@ -3778,328 +4035,47 @@ function toggleMsgVoice(idx, text) {
 }
 
 // ─── 声音克隆管理 ───────────────────────────────────────────
+// ─── 替身声音绑定（选择账号级复刻声）───────────────────────
 async function loadVoiceStatus() {
   if (!currentAvatar?.id) return;
-  try {
-    const res = await api('GET', '/api/media/voice-status/' + currentAvatar.id);
-    const statusEl = document.getElementById('voice-clone-status-text');
-    const listEl   = document.getElementById('voice-sample-list');
-    if (!statusEl) return;
+  const el = document.getElementById('avatar-voice-options');
+  const d = await api('GET', '/api/voices');
+  if (!d) { el.textContent = '加载失败'; return; }
 
-    const st = res.clone_status?.status || 'not_started';
-    const statusMap = {
-      not_started: '尚未开始 — 请录音或上传声音样本',
-      training:    '<span style="color:var(--purple)">⏳ 训练中</span>，通常需要 5~30 分钟，请稍后刷新',
-      success:     '✅ 克隆成功！替身将用 TA 的声音说话',
-      failed:      '❌ 训练失败，请删除旧样本重新上传',
-      unknown:     '状态未知，请稍后重试',
-    };
-    statusEl.innerHTML = `<span style="font-weight:500">${statusMap[st] || st}</span>`;
-    if (st === 'success') {
-      statusEl.style.color = 'var(--success,#059669)';
-      _avatarHasVoice = true;
-    }
+  const ready = (d.voices || []).filter(v => v.status === 'ready');
+  const cur = currentAvatar.user_voice_id || null;
 
-    // 试听区解锁
-    const previewActive = document.getElementById('voice-preview-active');
-    const previewLocked = document.getElementById('voice-preview-locked');
-    if (previewActive && previewLocked) {
-      previewActive.style.display = st === 'success' ? '' : 'none';
-      previewLocked.style.display = st === 'success' ? 'none' : '';
-    }
-
-    // 语言 select
-    const langSel = document.getElementById('voice-lang-select');
-    if (langSel && res.voice_language) langSel.value = res.voice_language;
-
-    // 样本计数 badge
-    const badge = document.getElementById('voice-count-badge');
-    if (badge) badge.textContent = `${res.samples?.length || 0} / 5`;
-
-    // 渲染样本列表
-    if (listEl) {
-      listEl.innerHTML = '';
-      (res.samples || []).forEach(s => {
-        const item = document.createElement('div');
-        item.className = 'voice-sample-item';
-        item.innerHTML = `
-          <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(s.filename)}</span>
-          <span class="vs-${s.status}">${{'pending':'待处理','uploading':'上传中','uploaded':'已上传','training':'训练中','ready':'已就绪','failed':'失败'}[s.status]||s.status}</span>
-          <button class="btn btn-secondary btn-sm" style="font-size:11px;padding:2px 8px" onclick="deleteVoiceSample('${s.id}')">删除</button>`;
-        listEl.appendChild(item);
-      });
-      if (!res.samples?.length) {
-        listEl.innerHTML = '<div style="font-size:13px;color:var(--text-3);margin-top:8px">暂无声音样本</div>';
-      }
-    }
-  } catch (e) {
-    const statusEl = document.getElementById('voice-clone-status-text');
-    if (statusEl) statusEl.textContent = '加载失败，请重试';
-  }
-}
-
-// ── 录音状态 ──
-const _rec = { mediaRecorder: null, chunks: [], timerInterval: null, startTime: 0, analyser: null, animFrame: null, blob: null, ext: '.webm' };
-
-function switchVoiceTab(tab) {
-  ['record','upload'].forEach(t => {
-    document.getElementById(`tab-${t}`)?.classList.toggle('active', t === tab);
-    const p = document.getElementById(`voice-panel-${t}`);
-    if (p) p.style.display = t === tab ? '' : 'none';
-  });
-}
-
-async function toggleRecording() {
-  if (_rec.mediaRecorder && _rec.mediaRecorder.state === 'recording') {
-    _rec.mediaRecorder.stop();
-  } else {
-    await _startRecording();
-  }
-}
-
-async function _startRecording() {
-  let stream;
-  try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
-  catch (e) { toast('无法访问麦克风：' + e.message, 'error'); return; }
-
-  _rec.chunks = []; _rec.blob = null;
-
-  // Level meter via AnalyserNode
-  const ac = new AudioContext();
-  const src = ac.createMediaStreamSource(stream);
-  _rec.analyser = ac.createAnalyser();
-  _rec.analyser.fftSize = 256;
-  src.connect(_rec.analyser);
-
-  // Pick best MIME type
-  const mimeType = MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4'
-    : MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus'
-    : 'audio/webm';
-  _rec.ext = mimeType.startsWith('audio/mp4') ? '.m4a' : '.webm';
-
-  _rec.mediaRecorder = new MediaRecorder(stream, { mimeType });
-  _rec.mediaRecorder.ondataavailable = e => { if (e.data.size > 0) _rec.chunks.push(e.data); };
-  _rec.mediaRecorder.onstop = () => {
-    stream.getTracks().forEach(t => t.stop());
-    clearInterval(_rec.timerInterval);
-    cancelAnimationFrame(_rec.animFrame);
-    ac.close();
-    _processRecording();
-  };
-  _rec.mediaRecorder.start(100);
-  _rec.startTime = Date.now();
-
-  // UI
-  const btn = document.getElementById('voice-rec-btn');
-  if (btn) btn.classList.add('recording');
-  const lbl = document.getElementById('voice-rec-label');
-  if (lbl) lbl.textContent = '停止录音';
-  const hint = document.getElementById('voice-rec-hint');
-  if (hint) hint.style.display = 'none';
-  const canvas = document.getElementById('voice-level-canvas');
-  if (canvas) canvas.style.display = '';
-  const timer = document.getElementById('voice-rec-timer');
-  if (timer) { timer.style.display = ''; timer.textContent = '0:00'; }
-  const qr = document.getElementById('voice-quality-result');
-  if (qr) qr.style.display = 'none';
-
-  _rec.timerInterval = setInterval(() => {
-    const s = Math.floor((Date.now() - _rec.startTime) / 1000);
-    const el = document.getElementById('voice-rec-timer');
-    if (el) {
-      el.textContent = `${Math.floor(s/60)}:${(s%60).toString().padStart(2,'0')}`;
-      el.style.color = s >= 10 ? '#059669' : 'var(--purple)';
-    }
-  }, 500);
-
-  _drawLevelMeter();
-}
-
-function _drawLevelMeter() {
-  const canvas = document.getElementById('voice-level-canvas');
-  if (!canvas || !_rec.analyser) return;
-  const ctx = canvas.getContext('2d');
-  const buf = new Uint8Array(_rec.analyser.frequencyBinCount);
-  (function draw() {
-    _rec.animFrame = requestAnimationFrame(draw);
-    _rec.analyser.getByteFrequencyData(buf);
-    const W = canvas.width, H = canvas.height;
-    ctx.fillStyle = '#f0effc'; ctx.fillRect(0, 0, W, H);
-    const bw = W / buf.length * 2.2;
-    for (let i = 0; i < buf.length; i++) {
-      const h = (buf[i] / 255) * H;
-      ctx.fillStyle = `hsl(242,55%,${40 + (buf[i]/255)*20}%)`;
-      ctx.fillRect(i * bw, H - h, Math.max(bw - 1, 1), h);
-    }
-  })();
-}
-
-async function _processRecording() {
-  const blob = new Blob(_rec.chunks, { type: _rec.mediaRecorder?.mimeType || 'audio/webm' });
-  _rec.blob = blob;
-
-  const btn = document.getElementById('voice-rec-btn');
-  if (btn) btn.classList.remove('recording');
-  const lbl = document.getElementById('voice-rec-label');
-  if (lbl) lbl.textContent = '开始录音';
-
-  const qr = document.getElementById('voice-quality-result');
-  if (qr) { qr.style.display = ''; qr.innerHTML = '<div style="font-size:13px;color:var(--text-3)">检测音频质量…</div>'; }
-
-  const quality = await _checkAudioQuality(blob, (Date.now() - _rec.startTime) / 1000);
-  if (!quality.ok) {
-    if (qr) qr.innerHTML = `
-      <div class="voice-quality-fail">⚠️ ${quality.reason}</div>
-      <button class="btn btn-secondary btn-sm" style="margin-top:8px" onclick="resetRecording()">重新录音</button>`;
+  if (!ready.length) {
+    el.innerHTML = '<div style="color:var(--text-3)">你还没有可用的复刻声音。</div>';
     return;
   }
 
-  const url = URL.createObjectURL(blob);
-  if (qr) qr.innerHTML = `
-    <div class="voice-quality-ok">✅ 音频良好，时长 ${quality.duration.toFixed(1)}s</div>
-    <audio controls src="${url}" style="margin-top:8px;width:100%;max-width:280px;height:36px;display:block"></audio>
-    <div style="display:flex;gap:8px;margin-top:10px">
-      <button class="btn btn-primary btn-sm" onclick="submitRecordedAudio()">上传录音</button>
-      <button class="btn btn-secondary btn-sm" onclick="resetRecording()">重录</button>
-    </div>`;
+  el.innerHTML = `
+    <label class="voice-opt" style="display:flex;align-items:center;gap:10px;padding:10px;border:1px solid ${!cur ? 'var(--purple)' : 'var(--border)'};border-radius:8px;margin-bottom:8px;cursor:pointer">
+      <input type="radio" name="avvoice" value="" ${!cur ? 'checked' : ''} onchange="setAvatarVoice(null)">
+      <div><div style="font-weight:600;font-size:13px">关闭（不使用声音）</div>
+      <div style="font-size:11px;color:var(--text-3)">对话中不显示小喇叭</div></div>
+    </label>` +
+    ready.map(v => `
+    <label class="voice-opt" style="display:flex;align-items:center;gap:10px;padding:10px;border:1px solid ${cur === v.id ? 'var(--purple)' : 'var(--border)'};border-radius:8px;margin-bottom:8px;cursor:pointer">
+      <input type="radio" name="avvoice" value="${v.id}" ${cur === v.id ? 'checked' : ''} onchange="setAvatarVoice('${v.id}')">
+      <div><div style="font-weight:600;font-size:13px">${v.voice_kind === 'self' ? '🙋' : '👤'} ${esc(v.name)}</div>
+      <div style="font-size:11px;color:var(--text-3)">${v.voice_kind === 'self' ? '本人声音' : '他人声音'}</div></div>
+    </label>`).join('');
 }
 
-async function _checkAudioQuality(blob, fallbackSecs) {
-  try {
-    const ab = await blob.arrayBuffer();
-    const ac = new AudioContext();
-    const buf = await ac.decodeAudioData(ab);
-    await ac.close();
-    if (buf.duration < 10) return { ok: false, reason: `录音时长 ${buf.duration.toFixed(1)}s，至少需要 10 秒` };
-    const ch = buf.getChannelData(0);
-    let ss = 0;
-    for (let i = 0; i < ch.length; i++) ss += ch[i] * ch[i];
-    if (Math.sqrt(ss / ch.length) < 0.005) return { ok: false, reason: '录音音量过低，请靠近麦克风或检查权限' };
-    return { ok: true, duration: buf.duration };
-  } catch (_) {
-    if (fallbackSecs < 10) return { ok: false, reason: `录音时长 ${fallbackSecs.toFixed(1)}s，至少需要 10 秒` };
-    return { ok: true, duration: fallbackSecs };
-  }
-}
-
-function resetRecording() {
-  _rec.blob = null; _rec.chunks = [];
-  ['voice-quality-result','voice-level-canvas','voice-rec-timer'].forEach(id => {
-    const el = document.getElementById(id); if (el) el.style.display = 'none';
-  });
-  const hint = document.getElementById('voice-rec-hint');
-  if (hint) hint.style.display = '';
-  const timer = document.getElementById('voice-rec-timer');
-  if (timer) timer.textContent = '0:00';
-}
-
-async function submitRecordedAudio() {
-  if (!_rec.blob || !currentAvatar?.id) return;
-  const lang = document.getElementById('voice-lang-select')?.value || 'zh';
-
-  // 火山 V3 复刻接口不支持 webm：录音先转 24kHz WAV（保留音质）
-  let blob = _rec.blob, ext = _rec.ext;
-  try {
-    blob = await _sttBlobToWav(_rec.blob, 24000);
-    ext = '.wav';
-  } catch (e) {
-    console.warn('样本 WAV 转码失败，按原格式上传:', e);
-  }
-
-  const fd = new FormData();
-  fd.append('audio', blob, `recording_${Date.now()}${ext}`);
-  fd.append('language', lang);
-  const btn = document.querySelector('[onclick="submitRecordedAudio()"]');
-  if (btn) { btn.disabled = true; btn.textContent = '上传中…'; }
-  try {
-    const resp = await fetch(API + '/api/media/voice-sample/' + currentAvatar.id, {
-      method: 'POST', headers: { Authorization: 'Bearer ' + token }, body: fd,
-    });
-    const data = await resp.json();
-    if (!resp.ok) throw new Error(data.error || '上传失败');
-    toast(data.message || '上传成功，训练已提交', 'success');
-    resetRecording();
-    loadVoiceStatus();
-  } catch (e) {
-    toast('上传失败：' + e.message, 'error');
-    if (btn) { btn.disabled = false; btn.textContent = '上传录音'; }
-  }
-}
-
-// ── 文件上传（含质量检测）──
-let _pendingVoiceFile = null;
-
-async function handleVoiceFileSelect(input) {
-  const file = input.files[0];
-  if (!file) return;
-  input.value = '';
-  _pendingVoiceFile = null;
-  const checkEl = document.getElementById('voice-file-check');
-  if (checkEl) { checkEl.style.display = ''; checkEl.innerHTML = '<div style="font-size:13px;color:var(--text-3)">检测文件…</div>'; }
-  if (file.size < 5000) {
-    if (checkEl) checkEl.innerHTML = '<div class="voice-quality-fail">⚠️ 文件太小，请选择至少 10 秒的录音</div>';
-    return;
-  }
-  if (file.size > 50 * 1024 * 1024) {
-    if (checkEl) checkEl.innerHTML = '<div class="voice-quality-fail">⚠️ 文件过大，上限 50MB</div>';
-    return;
-  }
-  _pendingVoiceFile = file;
-  const quality = await _checkAudioQuality(file, 15);
-  if (!quality.ok) {
-    if (checkEl) checkEl.innerHTML = `<div class="voice-quality-fail">⚠️ ${quality.reason}</div>`;
-    _pendingVoiceFile = null;
-    return;
-  }
-  const durInfo = quality.duration < 9999 ? `时长 ${quality.duration.toFixed(1)}s` : '';
-  if (checkEl) checkEl.innerHTML = `
-    <div class="voice-quality-ok">✅ 文件有效 ${durInfo}</div>
-    <div style="font-size:12px;color:var(--text-3);margin:4px 0 8px">${esc(file.name)}</div>
-    <button class="btn btn-primary btn-sm" onclick="submitFileAudio()">上传此文件</button>`;
-}
-
-async function submitFileAudio() {
-  if (!_pendingVoiceFile || !currentAvatar?.id) return;
-  const lang = document.getElementById('voice-lang-select')?.value || 'zh';
-  const fd = new FormData();
-  fd.append('audio', _pendingVoiceFile, _pendingVoiceFile.name);
-  fd.append('language', lang);
-  const btn = document.querySelector('[onclick="submitFileAudio()"]');
-  if (btn) { btn.disabled = true; btn.textContent = '上传中…'; }
-  toast('上传声音样本中…', 'info');
-  try {
-    const resp = await fetch(API + '/api/media/voice-sample/' + currentAvatar.id, {
-      method: 'POST', headers: { Authorization: 'Bearer ' + token }, body: fd,
-    });
-    const data = await resp.json();
-    if (!resp.ok) throw new Error(data.error || '上传失败');
-    toast(data.message || '上传成功，训练已提交', 'success');
-    _pendingVoiceFile = null;
-    const checkEl = document.getElementById('voice-file-check');
-    if (checkEl) checkEl.style.display = 'none';
-    loadVoiceStatus();
-  } catch (e) {
-    toast('上传失败：' + e.message, 'error');
-    if (btn) { btn.disabled = false; btn.textContent = '上传此文件'; }
-  }
-}
-
-async function deleteVoiceSample(sampleId) {
+async function setAvatarVoice(voiceId) {
   if (!currentAvatar?.id) return;
-  if (!confirm('确认删除这个声音样本？')) return;
-  try {
-    const resp = await fetch(API + '/api/media/voice-sample/' + currentAvatar.id + '/' + sampleId, {
-      method: 'DELETE',
-      headers: { Authorization: 'Bearer ' + token },
-    });
-    const data = await resp.json();
-    if (!resp.ok) throw new Error(data.error || '删除失败');
-    toast('已删除', 'success');
+  const res = await api('PUT', '/api/voices/avatar/' + currentAvatar.id, { voice_id: voiceId });
+  if (res?.ok) {
+    currentAvatar.user_voice_id = voiceId;
+    currentAvatar.has_voice = !!voiceId;
+    _avatarHasVoice = !!voiceId;
+    toast(voiceId ? '已启用该声音，对话中会显示小喇叭' : '已关闭声音', 'success');
     loadVoiceStatus();
-  } catch (e) {
-    toast('删除失败：' + e.message, 'error');
   }
 }
+
 
 async function previewTTS() {
   const text = document.getElementById('tts-preview-text')?.value?.trim();

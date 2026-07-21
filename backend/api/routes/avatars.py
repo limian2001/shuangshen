@@ -136,6 +136,19 @@ def get_avatar(avatar_id):
         avatar.pop("persona_prompt", None)
         avatar.pop("share_code", None)
 
+    # 声音状态：账号级复刻声就绪才算「有声音」（决定是否显示小喇叭）
+    avatar["has_voice"] = False
+    if avatar.get("user_voice_id"):
+        with get_db() as conn:
+            v = row_to_dict(conn.execute(
+                "SELECT status, name FROM user_voices WHERE id=?",
+                (avatar["user_voice_id"],)).fetchone())
+        if v and v.get("status") == "ready":
+            avatar["has_voice"] = True
+            avatar["voice_name"] = v.get("name")
+    elif avatar.get("voice_model_id"):
+        avatar["has_voice"] = True   # 兼容旧的替身级火山音色
+
     return jsonify(_normalize_avatar(avatar))
 
 

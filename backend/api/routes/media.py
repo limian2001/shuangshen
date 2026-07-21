@@ -86,16 +86,27 @@ def tts_endpoint(avatar_id):
     if len(text) > 500:
         text = text[:500]
 
-    # 拉取替身声音配置
+    # 拉取替身声音配置：优先账号级复刻声（user_voice_id），回退旧的 voice_model_id
     with get_db() as conn:
         avatar = row_to_dict(conn.execute(
-            "SELECT voice_model_id, voice_language FROM avatars WHERE id = ?",
+            """SELECT a.voice_model_id, a.voice_language, a.user_voice_id,
+                      v.voice_id AS uv_voice_id, v.status AS uv_status
+               FROM avatars a
+               LEFT JOIN user_voices v ON a.user_voice_id = v.id
+               WHERE a.id = ?""",
             (avatar_id,),
         ).fetchone())
     if not avatar:
         return jsonify({"error": "替身不存在"}), 404
 
-    voice_id = avatar.get("voice_model_id") or None
+    if avatar.get("uv_voice_id") and avatar.get("uv_status") == "ready":
+        voice_id = avatar["uv_voice_id"]
+        # 记录使用时间（供应商音色一年未用会被自动清理）
+        with get_db() as conn:
+            conn.execute("UPDATE user_voices SET last_used_at=datetime('now') WHERE id=?",
+                         (avatar["user_voice_id"],))
+    else:
+        voice_id = avatar.get("voice_model_id") or None
     language = avatar.get("voice_language") or "zh"
 
     try:

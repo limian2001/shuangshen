@@ -27,6 +27,7 @@ from backend.api.routes.viewer import viewer_bp
 from backend.api.routes.takeover import takeover_bp
 from backend.api.routes.payment import payment_bp
 from backend.api.routes.media import media_bp
+from backend.api.routes.voices import voices_bp
 
 
 def create_app() -> Flask:
@@ -47,6 +48,7 @@ def create_app() -> Flask:
     app.register_blueprint(takeover_bp)
     app.register_blueprint(payment_bp)
     app.register_blueprint(media_bp)
+    app.register_blueprint(voices_bp)
 
     # CORS — 允许前端页面调用 API
     @app.after_request
