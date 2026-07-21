@@ -1661,7 +1661,8 @@ function showPage(page) {
   document.getElementById('topbar-back-btn').style.display = 'none';
   document.getElementById('mobile-subnav').classList.remove('active');
 
-  const pages = ['avatars','received','topics','myvoices','chat','memories','ingest','identity','share'];
+  // ⚠️ 必须列全所有 page-* 元素，漏一个该页就永远不会被隐藏（曾漏 voice 导致残留）
+  const pages = ['avatars','received','topics','myvoices','chat','memories','ingest','identity','voice','share'];
   pages.forEach(p => {
     const el = document.getElementById('page-' + p);
     if (el) el.style.display = 'none';

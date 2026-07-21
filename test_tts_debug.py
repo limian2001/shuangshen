@@ -36,8 +36,9 @@ async def test(label, url, headers):
 async def main():
     v3_url  = "wss://openspeech.bytedance.com/api/v3/tts/bidirection"
     # 正确 auth：X-Api-Key（官方示例确认）
+    import os
     v3_headers = {
-        "X-Api-Key":         "d3854168-bdc5-4a94-bdad-8d7a892bca32",
+        "X-Api-Key":         os.getenv("VOLC_API_KEY", ""),   # 从环境变量读，不硬编码
         "X-Api-Resource-Id": "seed-tts-2.0",
         "X-Api-Connect-Id":  "dbg-conn-001",
     }

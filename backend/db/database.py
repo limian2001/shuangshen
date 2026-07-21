@@ -337,6 +337,9 @@ def _run_migrations(conn: sqlite3.Connection):
             created_at  TEXT DEFAULT (datetime('now'))
         )""",
         "CREATE INDEX IF NOT EXISTS idx_user_voices_user ON user_voices(user_id)",
+        # ⚠️ CREATE TABLE IF NOT EXISTS 不会给已存在的表加列，
+        #    后续新增字段必须同时写 ALTER TABLE（重复执行会报错，已被 try 吞掉）
+        "ALTER TABLE user_voices ADD COLUMN instruction TEXT DEFAULT ''",
         # 替身绑定的账号级声音（NULL/空 = 关闭，不显示小喇叭）
         "ALTER TABLE avatars ADD COLUMN user_voice_id TEXT DEFAULT NULL",
         # v1.4: 对话链路 Trace（话题检测/记忆检索/Prompt/LLM 全过程，admin 可查）
