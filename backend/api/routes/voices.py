@@ -232,6 +232,42 @@ def delete_voice(voice_id):
     return jsonify({"ok": True})
 
 
+@voices_bp.post("/<voice_id>/preview")
+@require_auth
+def preview_voice(voice_id):
+    """
+    试听：用该复刻音色合成一段文字，直接返回 MP3。
+    不依赖任何替身，复刻完立刻能听效果。
+    Body: {"text": "..."}
+    """
+    data = request.get_json() or {}
+    text = (data.get("text") or "").strip()
+    if not text:
+        return jsonify({"error": "请输入试听文字"}), 400
+
+    with get_db() as conn:
+        v = row_to_dict(conn.execute(
+            "SELECT voice_id, status, instruction FROM user_voices WHERE id=? AND user_id=?",
+            (voice_id, g.user_id)).fetchone())
+    if not v:
+        return jsonify({"error": "声音不存在"}), 404
+    if v.get("status") != "ready" or not v.get("voice_id"):
+        return jsonify({"error": "声音尚未就绪"}), 400
+
+    from flask import Response
+    from backend.services.media import tts_synthesize
+    try:
+        audio = tts_synthesize(text[:200], voice_id=v["voice_id"],
+                               instruction=v.get("instruction") or "")
+    except RuntimeError as e:
+        return jsonify({"error": f"合成失败：{e}"}), 503
+
+    # 试听也算使用，刷新 last_used_at（供应商音色一年未用会被清理）
+    with get_db() as conn:
+        conn.execute("UPDATE user_voices SET last_used_at=datetime('now') WHERE id=?", (voice_id,))
+    return Response(audio, mimetype="audio/mpeg")
+
+
 @voices_bp.post("/<voice_id>/apply-all")
 @require_auth
 def apply_all(voice_id):

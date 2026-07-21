@@ -14,6 +14,10 @@ from backend.db.database import init_db
 
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
 
+# 构建版本号 —— 与 frontend/index.html 的 SS_BUILD 保持一致，
+# 每次改动递增，用于确认线上跑的是不是最新代码（GET / 或 /api/version）
+BUILD = "20260718-3"
+
 # 注册所有路由蓝图
 from backend.api.routes.auth import auth_bp
 from backend.api.routes.avatars import avatars_bp
@@ -148,15 +152,54 @@ def create_app() -> Flask:
 </body></html>"""
         return Response(html, mimetype="text/html")
 
-    # 健康检查
+    # 健康检查 + 版本/schema 自检（用于确认线上跑的是不是最新代码）
     @app.get("/")
     def health():
         return jsonify({
             "status": "ok",
             "service": "Shuangshen API",
-            "version": "0.1.0",
+            "build": BUILD,
             "llm_provider": config.LLM_PROVIDER,
             "db": str(config.DB_PATH),
+        })
+
+    @app.get("/api/version")
+    def version_info():
+        """
+        线上版本自检：build 号 + 关键表字段是否已迁移。
+        curl https://<域名>/api/version 即可判断服务器代码/数据库是否最新。
+        """
+        from backend.db.database import get_db
+        checks = {}
+        expect = {
+            "user_voices":   ["instruction", "consent_at", "last_used_at"],
+            "avatars":       ["user_voice_id"],
+            "chat_messages": ["msg_type", "audio_path"],
+            "chat_traces":   ["trace"],
+            "system_alerts": ["tag"],
+            "rag_counters":  ["vector_hits"],
+        }
+        try:
+            with get_db() as conn:
+                for table, cols in expect.items():
+                    try:
+                        actual = {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
+                    except Exception:
+                        actual = set()
+                    if not actual:
+                        checks[table] = "❌ 表不存在"
+                    else:
+                        missing = [c for c in cols if c not in actual]
+                        checks[table] = "✅ ok" if not missing else f"❌ 缺字段 {missing}"
+        except Exception as e:
+            checks["_error"] = str(e)
+
+        all_ok = all(v == "✅ ok" for v in checks.values())
+        return jsonify({
+            "build": BUILD,
+            "schema_ok": all_ok,
+            "schema": checks,
+            "hint": "schema_ok=false 时说明数据库迁移未生效，重新部署（deploy.sh）即可",
         })
 
     # 统一错误处理

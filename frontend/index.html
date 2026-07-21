@@ -2,8 +2,8 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="ss-build" content="20260718-1">
-<script>const SS_BUILD = '20260718-1'; console.log('ss-build: ' + SS_BUILD);</script>
+<meta name="ss-build" content="20260718-3">
+<script>const SS_BUILD = '20260718-3'; console.log('ss-build: ' + SS_BUILD);</script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>替身 · Shuangshen</title>
 <style>
@@ -1184,14 +1184,6 @@ body.is-mobile .row .field   { width: 100%; }
         </div>
       </div>
 
-      <div class="card" style="margin-top:14px" id="avatar-voice-preview-card">
-        <div class="card-title">试听</div>
-        <div style="display:flex;gap:8px">
-          <input type="text" id="tts-preview-text" placeholder="例：你好，最近还好吗？" style="flex:1;padding:8px 12px;border:1px solid var(--border-md);border-radius:8px;font-size:13px">
-          <button class="btn btn-primary btn-sm" onclick="previewTTS()">合成试听</button>
-        </div>
-        <div id="tts-preview-player" style="margin-top:10px"></div>
-      </div>
     </div>
 
     <div id="page-share" class="page" style="display:none">
@@ -1566,8 +1558,17 @@ window.onload = () => {
     showLogin();
   }
 
-  // 渲染构建版本号（登录页 + 侧边栏小字）
+  // 渲染构建版本号（登录页 + 侧边栏小字）；同时拉后端版本做一致性校验
   document.querySelectorAll('.ss-build-text').forEach(el => { el.textContent = SS_BUILD; });
+  fetch(API + '/api/version').then(r => r.json()).then(v => {
+    const same = v.build === SS_BUILD;
+    document.querySelectorAll('.ss-build-text').forEach(el => {
+      el.innerHTML = same
+        ? SS_BUILD + (v.schema_ok ? '' : ' <span style="color:#dc2626">·DB未迁移</span>')
+        : `${SS_BUILD} <span style="color:#dc2626">/后端${v.build}不一致</span>`;
+    });
+    if (!same || !v.schema_ok) console.warn('[版本校验]', v);
+  }).catch(() => {});
 };
 
 // ─── 游客模式 ─────────────────────────────────
@@ -3785,6 +3786,16 @@ async function loadMyVoices() {
           <button class="btn btn-secondary btn-sm" onclick="deleteMyVoice('${v.id}','${esc(v.name)}')">删除</button>
         </div>
       </div>
+      ${v.status === 'ready' ? `
+      <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+        <div style="font-size:12px;color:var(--text-3);margin-bottom:6px">🎧 试听效果</div>
+        <div style="display:flex;gap:8px">
+          <input type="text" id="vp-text-${v.id}" value="你好呀，最近过得怎么样？我很想你。"
+                 maxlength="100" style="flex:1;padding:8px 12px;border:1px solid var(--border-md);border-radius:8px;font-size:13px">
+          <button class="btn btn-secondary btn-sm" style="white-space:nowrap" onclick="previewMyVoice('${v.id}')">合成试听</button>
+        </div>
+        <div id="vp-player-${v.id}" style="margin-top:8px"></div>
+      </div>` : ''}
     </div>`;
   }).join('') : '<div class="empty"><p>还没有复刻声音，在下方创建第一个</p></div>';
 
@@ -3961,6 +3972,30 @@ async function _doVoiceClone() {
   }
 }
 
+async function previewMyVoice(voiceId) {
+  const text = document.getElementById('vp-text-' + voiceId)?.value?.trim();
+  const playerEl = document.getElementById('vp-player-' + voiceId);
+  if (!text) return toast('请输入试听文字', 'error');
+  playerEl.innerHTML = '<span style="font-size:12px;color:var(--text-3)">合成中…</span>';
+  try {
+    const resp = await fetch(API + `/api/voices/${voiceId}/preview`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+      body: JSON.stringify({ text }),
+    });
+    if (!resp.ok) { const e = await resp.json(); throw new Error(e.error || '合成失败'); }
+    const url = URL.createObjectURL(await resp.blob());
+    playerEl.innerHTML = '';
+    const audio = document.createElement('audio');
+    audio.src = url; audio.controls = true; audio.autoplay = true;
+    audio.style.width = '100%';
+    playerEl.appendChild(audio);
+  } catch (e) {
+    playerEl.innerHTML = '';
+    toast('试听失败：' + e.message, 'error');
+  }
+}
+
 async function applyVoiceAll(voiceId) {
   const res = await api('POST', `/api/voices/${voiceId}/apply-all`);
   if (res?.ok) {
@@ -4105,32 +4140,6 @@ async function setAvatarVoice(voiceId) {
 }
 
 
-async function previewTTS() {
-  const text = document.getElementById('tts-preview-text')?.value?.trim();
-  if (!text) { toast('请输入试听文字', 'error'); return; }
-  if (!currentAvatar?.id) return;
-  const playerEl = document.getElementById('tts-preview-player');
-  if (playerEl) playerEl.innerHTML = '<span style="font-size:13px;color:var(--text-3)">合成中…</span>';
-  try {
-    const resp = await fetch(API + '/api/media/tts/' + currentAvatar.id, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-      body: JSON.stringify({ text }),
-    });
-    if (!resp.ok) { const err = await resp.json(); throw new Error(err.error || '合成失败'); }
-    const blob = await resp.blob();
-    const url = URL.createObjectURL(blob);
-    if (playerEl) {
-      playerEl.innerHTML = '';
-      const audio = document.createElement('audio');
-      audio.src = url; audio.controls = true; audio.autoplay = true;
-      playerEl.appendChild(audio);
-    }
-  } catch (e) {
-    toast('TTS 失败：' + e.message, 'error');
-    if (playerEl) playerEl.innerHTML = '';
-  }
-}
 
 
 </script>
