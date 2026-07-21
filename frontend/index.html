@@ -867,9 +867,35 @@ body.is-mobile .row .field   { width: 100%; }
           </div>
         </div>
 
-        <div class="field">
-          <label>声音名称</label>
-          <input type="text" id="voice-name" placeholder="如：我的声音 / 妈妈" maxlength="20">
+        <div class="row">
+          <div class="field">
+            <label>声音名称</label>
+            <input type="text" id="voice-name" placeholder="如：我的声音 / 妈妈" maxlength="20">
+          </div>
+          <div class="field">
+            <label>说话口音 <span style="font-size:11px;color:var(--text-3)">合成时使用</span></label>
+            <select id="voice-dialect">
+              <option value="">普通话（默认）</option>
+              <option value="请用四川话表达。">四川话</option>
+              <option value="请用粤语表达。">粤语</option>
+              <option value="请用东北话表达。">东北话</option>
+              <option value="请用河南话表达。">河南话</option>
+              <option value="请用上海话表达。">上海话</option>
+              <option value="请用陕西话表达。">陕西话</option>
+              <option value="请用山东话表达。">山东话</option>
+              <option value="请用湖北话表达。">湖北话</option>
+              <option value="请用湖南话表达。">湖南话</option>
+              <option value="请用闽南话表达。">闽南话</option>
+              <option value="请用天津话表达。">天津话</option>
+              <option value="请用云南话表达。">云南话</option>
+              <option value="请用贵州话表达。">贵州话</option>
+              <option value="请用江西话表达。">江西话</option>
+              <option value="请用山西话表达。">山西话</option>
+              <option value="请用甘肃话表达。">甘肃话</option>
+              <option value="请用宁夏话表达。">宁夏话</option>
+            </select>
+            <div style="font-size:11px;color:var(--text-3);margin-top:4px">录样本时说方言效果更佳</div>
+          </div>
         </div>
 
         <div class="field">
@@ -3750,7 +3776,7 @@ async function loadMyVoices() {
             <span style="font-size:11px;color:var(--text-3);font-weight:400">· ${v.voice_kind === 'self' ? '本人' : '他人'}</span>
           </div>
           <div style="font-size:12px;color:var(--text-3);margin-top:2px">
-            ${st} · 已应用到 ${v.bound_avatars} 个替身${v.consent_at ? ' · 已授权确认' : ''}
+            ${st} · 已应用到 ${v.bound_avatars} 个替身${v.instruction ? ' · ' + esc(v.instruction.replace('请用','').replace('表达。','')) : ''}${v.consent_at ? ' · 已授权确认' : ''}
           </div>
         </div>
         <div style="display:flex;gap:6px">
@@ -3913,6 +3939,7 @@ async function _doVoiceClone() {
   fd.append('audio', _voiceBlob, _voiceFileName || 'sample.wav');
   fd.append('kind', _voiceKind);
   fd.append('name', document.getElementById('voice-name').value.trim() || (_voiceKind === 'self' ? '我的声音' : '他人声音'));
+  fd.append('instruction', document.getElementById('voice-dialect').value || '');
   if (_voiceKind === 'other') fd.append('consent', '1');
 
   try {

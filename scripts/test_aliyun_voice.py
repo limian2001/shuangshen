@@ -58,35 +58,43 @@ if not voice_id:
 print(f"✅ 复刻成功  voice_id = {voice_id}")
 print(f"   （复刻本身免费；账号配额 1000 个）\n")
 
-# ② 用复刻音色合成
-print("── ② 语音合成 ──")
-code, data = post("/api/v1/services/aigc/multimodal-generation/generation", {
-    "model": MODEL,
-    "input": {"text": "你好，这是声音复刻的合成测试，如果听到的是样本里的音色就说明成功了。",
-              "voice": voice_id},
-    "parameters": {"format": "mp3"},
-})
-audio_bytes = b""
-if code == 200 and isinstance(data, dict):
-    out = (data.get("output") or {})
+# ② 用复刻音色合成（CosyVoice 专用端点 SpeechSynthesizer）
+def synth(text, instruction, out_file):
+    inp = {"text": text, "voice": voice_id, "format": "mp3", "sample_rate": 24000}
+    if instruction:
+        inp["instruction"] = instruction
+    code, data = post("/api/v1/services/audio/tts/SpeechSynthesizer",
+                      {"model": MODEL, "input": inp})
+    if code != 200 or not isinstance(data, dict):
+        print(f"❌ HTTP {code}: {data}")
+        return b""
+    out = data.get("output") or {}
     au  = out.get("audio") or {}
-    print(f"   响应结构: output.keys={list(out.keys())} audio.keys={list(au.keys())}")
-    if au.get("url"):
-        with urllib.request.urlopen(au["url"], timeout=60) as r:
-            audio_bytes = r.read()
-        print("   音频来源: audio.url（下载）")
+    print(f"   响应: output.keys={list(out.keys())} audio.keys={list(au.keys())}")
+    url = au.get("url") or out.get("url")
+    b = b""
+    if url:
+        with urllib.request.urlopen(url, timeout=60) as r:
+            b = r.read()
+        print("   音频来源: audio.url")
     elif au.get("data"):
-        audio_bytes = base64.b64decode(au["data"])
-        print("   音频来源: audio.data（base64）")
-    if audio_bytes:
-        with open("/tmp/aliyun_tts_test.mp3", "wb") as f:
-            f.write(audio_bytes)
-        print(f"✅ 合成成功  {len(audio_bytes)} 字节 → /tmp/aliyun_tts_test.mp3")
-        print("   取出试听: docker cp shuangshen:/tmp/aliyun_tts_test.mp3 .  （容器内运行时）")
+        b = base64.b64decode(au["data"])
+        print("   音频来源: audio.data(base64)")
+    if b:
+        with open(out_file, "wb") as f:
+            f.write(b)
+        print(f"✅ {len(b)} 字节 → {out_file}")
     else:
-        print(f"❌ 未取到音频: {json.dumps(data, ensure_ascii=False)[:500]}")
-else:
-    print(f"❌ 合成失败 HTTP {code}: {data}")
+        print(f"❌ 未取到音频: {json.dumps(data, ensure_ascii=False)[:400]}")
+    return b
+
+
+print("── ② 语音合成（普通话）──")
+audio_bytes = synth("你好，这是声音复刻的合成测试，听到的音色应该来自样本。",
+                    "", "/tmp/aliyun_tts_test.mp3")
+
+print("\n── ②b 方言测试（四川话指令）──")
+synth("今天天气巴适得很，你吃饭了没得？", "请用四川话表达。", "/tmp/aliyun_tts_sichuan.mp3")
 
 # ③ 清理测试音色
 print("\n── ③ 清理测试音色 ──")

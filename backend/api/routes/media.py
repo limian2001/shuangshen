@@ -90,7 +90,8 @@ def tts_endpoint(avatar_id):
     with get_db() as conn:
         avatar = row_to_dict(conn.execute(
             """SELECT a.voice_model_id, a.voice_language, a.user_voice_id,
-                      v.voice_id AS uv_voice_id, v.status AS uv_status
+                      v.voice_id AS uv_voice_id, v.status AS uv_status,
+                      v.instruction AS uv_instruction
                FROM avatars a
                LEFT JOIN user_voices v ON a.user_voice_id = v.id
                WHERE a.id = ?""",
@@ -99,8 +100,10 @@ def tts_endpoint(avatar_id):
     if not avatar:
         return jsonify({"error": "替身不存在"}), 404
 
+    instruction = ""
     if avatar.get("uv_voice_id") and avatar.get("uv_status") == "ready":
         voice_id = avatar["uv_voice_id"]
+        instruction = avatar.get("uv_instruction") or ""
         # 记录使用时间（供应商音色一年未用会被自动清理）
         with get_db() as conn:
             conn.execute("UPDATE user_voices SET last_used_at=datetime('now') WHERE id=?",
@@ -110,7 +113,8 @@ def tts_endpoint(avatar_id):
     language = avatar.get("voice_language") or "zh"
 
     try:
-        audio_bytes = tts_synthesize(text, voice_id=voice_id, language=language)
+        audio_bytes = tts_synthesize(text, voice_id=voice_id, language=language,
+                                     instruction=instruction)
     except RuntimeError as e:
         # 克隆音色失败（如训练未完成）→ 自动降级为标准普通话音色
         # 注意打日志：降级是兜底，频繁触发说明克隆合成链路有问题

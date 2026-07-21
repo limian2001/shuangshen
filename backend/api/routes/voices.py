@@ -87,7 +87,7 @@ def get_sample(voice_id):
 def list_voices():
     with get_db() as conn:
         rows = rows_to_list(conn.execute(
-            """SELECT id, voice_kind, name, status, provider, consent_at, created_at,
+            """SELECT id, voice_kind, name, status, provider, instruction, consent_at, created_at,
                       (SELECT COUNT(*) FROM avatars a
                         WHERE a.user_voice_id = v.id AND a.status != 'deleted') AS bound_avatars
                FROM user_voices v
@@ -120,6 +120,7 @@ def create_voice():
     if kind not in ("self", "other"):
         return jsonify({"error": "kind 只能是 self 或 other"}), 400
     name = (request.form.get("name") or ("我的声音" if kind == "self" else "他人声音")).strip()[:20]
+    instruction = (request.form.get("instruction") or "").strip()[:50]   # 方言/语气指令
 
     # 复刻他人声音必须确认授权
     if kind == "other" and request.form.get("consent") != "1":
@@ -161,9 +162,9 @@ def create_voice():
     with get_db() as conn:
         conn.execute(
             """INSERT INTO user_voices (id, user_id, voice_kind, name, provider,
-                                        status, sample_path, consent_at)
-               VALUES (?, ?, ?, ?, ?, 'training', ?, ?)""",
-            (voice_id, g.user_id, kind, name, config.TTS_PROVIDER, str(path),
+                                        status, sample_path, instruction, consent_at)
+               VALUES (?, ?, ?, ?, ?, 'training', ?, ?, ?)""",
+            (voice_id, g.user_id, kind, name, config.TTS_PROVIDER, str(path), instruction,
              None if kind == "self" else _now()),   # 他人声音记录授权确认时间（存证）
         )
 

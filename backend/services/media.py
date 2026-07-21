@@ -323,6 +323,7 @@ def tts_synthesize(
     language: str = "zh",
     speed: float = 1.0,
     volume: float = 1.0,
+    instruction: str = "",
 ) -> bytes:
     """
     文字合成语音。
@@ -340,7 +341,7 @@ def tts_synthesize(
         # 阿里云音色（CosyVoice 复刻返回的 voice_id）走阿里云；
         # S_ 开头为火山旧音色，继续走火山（兼容存量数据）
         if not voice_id.startswith("S_") and config.DASHSCOPE_API_KEY:
-            return aliyun_tts(text, voice_id, speed)
+            return aliyun_tts(text, voice_id, speed, instruction)
         return _tts_clone_multi(text, voice_id, speed)
 
     # 默认音色走 seed-tts-2.0 WebSocket
@@ -535,19 +536,32 @@ def aliyun_voice_delete(voice_id: str) -> None:
         print(f"[TTS] 阿里云音色删除失败（忽略）: {e}")
 
 
-def aliyun_tts(text: str, voice_id: str, speed: float = 1.0) -> bytes:
-    """用复刻音色合成语音（非流式 HTTP），返回音频字节。"""
+def aliyun_tts(text: str, voice_id: str, speed: float = 1.0,
+               instruction: str = "") -> bytes:
+    """
+    CosyVoice 非实时合成：POST /api/v1/services/audio/tts/SpeechSynthesizer
+    返回音频字节（响应给的是 24 小时有效的 URL，这里直接下载成 bytes）。
+
+    instruction: 指令控制（复刻音色专用），如「请用四川话表达。」用于方言/语气；
+                 上限 100 字符（汉字算 2）。
+    """
     key = config.DASHSCOPE_API_KEY
     if not key:
         raise RuntimeError("DASHSCOPE_API_KEY 未配置")
-    body = {
-        "model": config.COSYVOICE_MODEL,
-        "input": {"text": text[:500], "voice": voice_id},
-        "parameters": {"format": "mp3", "rate": round(speed, 2)},
+
+    inp = {
+        "text": text[:500],
+        "voice": voice_id,
+        "format": "mp3",
+        "sample_rate": 24000,
     }
+    if instruction:
+        inp["instruction"] = instruction[:50]
+
     req = urllib.request.Request(
-        _dashscope_base() + "/api/v1/services/aigc/multimodal-generation/generation",
-        data=json.dumps(body, ensure_ascii=False).encode(),
+        _dashscope_base() + "/api/v1/services/audio/tts/SpeechSynthesizer",
+        data=json.dumps({"model": config.COSYVOICE_MODEL, "input": inp},
+                        ensure_ascii=False).encode(),
         headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
         method="POST",
     )
@@ -560,10 +574,10 @@ def aliyun_tts(text: str, voice_id: str, speed: float = 1.0) -> bytes:
         ) from e
 
     out = data.get("output") or {}
-    # 返回可能是 audio.url（下载）或 audio.data（base64）
     audio = out.get("audio") or {}
-    if audio.get("url"):
-        with urllib.request.urlopen(audio["url"], timeout=60) as r:
+    url = audio.get("url") or out.get("url")
+    if url:
+        with urllib.request.urlopen(url, timeout=60) as r:
             return r.read()
     if audio.get("data"):
         return base64.b64decode(audio["data"])

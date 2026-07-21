@@ -331,6 +331,7 @@ def _run_migrations(conn: sqlite3.Connection):
             voice_id    TEXT DEFAULT '',           -- 供应商返回的音色 ID
             status      TEXT DEFAULT 'training',   -- training | ready | failed
             sample_path TEXT DEFAULT '',
+            instruction TEXT DEFAULT '',           -- 合成指令，如「请用四川话表达。」（方言/语气）
             consent_at  TEXT DEFAULT NULL,         -- 复刻他人声音的授权确认时间（存证）
             last_used_at TEXT DEFAULT NULL,        -- 防供应商一年未用自动清理
             created_at  TEXT DEFAULT (datetime('now'))
