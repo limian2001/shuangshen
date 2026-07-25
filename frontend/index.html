@@ -2,8 +2,8 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="ss-build" content="20260718-7">
-<script>const SS_BUILD = '20260718-7'; console.log('ss-build: ' + SS_BUILD);</script>
+<meta name="ss-build" content="20260718-9">
+<script>const SS_BUILD = '20260718-9'; console.log('ss-build: ' + SS_BUILD);</script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>替身 · Shuangshen</title>
 <style>
@@ -906,7 +906,7 @@ body.is-mobile .row .field   { width: 100%; }
               <option value="请用甘肃话表达。">甘肃话</option>
               <option value="请用宁夏话表达。">宁夏话</option>
             </select>
-            <div style="font-size:11px;color:var(--text-3);margin-top:4px">录样本时说方言效果更佳</div>
+            <div id="voice-dialect-hint" style="font-size:11px;color:var(--text-3);margin-top:4px">录样本时说方言效果更佳</div>
           </div>
         </div>
 
@@ -3853,7 +3853,12 @@ async function loadMyVoices() {
             <span style="font-size:11px;color:var(--text-3);font-weight:400">· ${v.voice_kind === 'self' ? '本人' : '他人'}</span>
           </div>
           <div style="font-size:12px;color:var(--text-3);margin-top:2px">
-            ${st} · 已应用到 ${v.bound_avatars} 个替身${v.instruction ? ' · ' + esc(v.instruction.replace('请用','').replace('表达。','')) : ''}${v.consent_at ? ' · 已授权确认' : ''}
+            ${st} · ${v.provider === 'volc' ? '火山' : '阿里云'} · 已应用到 ${v.bound_avatars} 个替身${
+              v.instruction
+                ? (v.provider === 'volc'
+                    ? ' · <span style="color:#d97706">' + esc(v.instruction.replace('请用','').replace('表达。','')) + '(火山不支持,未生效)</span>'
+                    : ' · ' + esc(v.instruction.replace('请用','').replace('表达。','')))
+                : ''}${v.consent_at ? ' · 已授权确认' : ''}
           </div>
         </div>
         <div style="display:flex;gap:6px">
@@ -3878,6 +3883,19 @@ async function loadMyVoices() {
   _voiceLimits = d.limits || { self: { used: 0, max: 2, free_quota: 1 },
                                other: { used: 0, max: 1, free_quota: 1 } };
   _voiceFree = d.free; _voiceCost = d.cost;
+
+  // 方言依赖「指令控制」，仅阿里云通道支持；火山通道禁用并说明原因
+  const dialectSel = document.getElementById('voice-dialect');
+  const dialectHint = document.getElementById('voice-dialect-hint');
+  if (dialectSel) {
+    const ok = d.supports_dialect !== false;
+    dialectSel.disabled = !ok;
+    dialectSel.style.opacity = ok ? '' : '.5';
+    if (!ok) dialectSel.value = '';
+    if (dialectHint) dialectHint.innerHTML = ok
+      ? '录样本时说方言效果更佳'
+      : '<span style="color:#d97706">当前为火山通道，不支持方言指令；需要方言请在后台切换为阿里云通道</span>';
+  }
   const selfFull  = _voiceLimits.self.used  >= _voiceLimits.self.max;
   const otherFull = _voiceLimits.other.used >= _voiceLimits.other.max;
   const allFull = selfFull && otherFull;

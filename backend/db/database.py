@@ -340,6 +340,9 @@ def _run_migrations(conn: sqlite3.Connection):
         # ⚠️ CREATE TABLE IF NOT EXISTS 不会给已存在的表加列，
         #    后续新增字段必须同时写 ALTER TABLE（重复执行会报错，已被 try 吞掉）
         "ALTER TABLE user_voices ADD COLUMN instruction TEXT DEFAULT ''",
+        # 音色绑定的合成模型：阿里云音色不能跨 target_model 使用，
+        # 必须记录复刻时的模型，否则改 COSYVOICE_MODEL 后旧音色合成会失败
+        "ALTER TABLE user_voices ADD COLUMN model TEXT DEFAULT ''",
         # 替身绑定的账号级声音（NULL/空 = 关闭，不显示小喇叭）
         "ALTER TABLE avatars ADD COLUMN user_voice_id TEXT DEFAULT NULL",
         # v1.6: 运行时设置 KV（admin 可改，立即生效，不用重启/改env）

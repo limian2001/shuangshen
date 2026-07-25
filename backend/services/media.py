@@ -324,6 +324,7 @@ def tts_synthesize(
     speed: float = 1.0,
     volume: float = 1.0,
     instruction: str = "",
+    model: str = "",
 ) -> bytes:
     """
     文字合成语音。
@@ -339,9 +340,14 @@ def tts_synthesize(
 
     if voice_id:
         # 阿里云音色（CosyVoice 复刻返回的 voice_id）走阿里云；
-        # S_ 开头为火山旧音色，继续走火山（兼容存量数据）
+        # S_ 开头为火山音色，走火山
         if not voice_id.startswith("S_") and config.DASHSCOPE_API_KEY:
-            return aliyun_tts(text, voice_id, speed, instruction)
+            return aliyun_tts(text, voice_id, speed, instruction, model)
+        # ⚠️ 火山无「指令控制」能力：方言只能靠样本本身，instruction 无法生效。
+        #    此处显式记录，避免用户设了方言却静默失效（曾导致「选上海话出普通话」）
+        if instruction:
+            from backend.services.llm_provider import alert
+            alert("方言不生效", f"火山通道不支持指令控制，方言设置被忽略 voice={voice_id}: {instruction}")
         return _tts_clone_multi(text, voice_id, speed)
 
     # 默认音色走 seed-tts-2.0 WebSocket
@@ -537,13 +543,15 @@ def aliyun_voice_delete(voice_id: str) -> None:
 
 
 def aliyun_tts(text: str, voice_id: str, speed: float = 1.0,
-               instruction: str = "") -> bytes:
+               instruction: str = "", model: str = "") -> bytes:
     """
     CosyVoice 非实时合成：POST /api/v1/services/audio/tts/SpeechSynthesizer
     返回音频字节（响应给的是 24 小时有效的 URL，这里直接下载成 bytes）。
 
     instruction: 指令控制（复刻音色专用），如「请用四川话表达。」用于方言/语气；
                  上限 100 字符（汉字算 2）。
+    model:       该音色复刻时绑定的 target_model。阿里云音色不能跨模型使用，
+                 必须与复刻时一致，留空才回退全局配置。
     """
     key = config.DASHSCOPE_API_KEY
     if not key:
@@ -560,7 +568,8 @@ def aliyun_tts(text: str, voice_id: str, speed: float = 1.0,
 
     req = urllib.request.Request(
         _dashscope_base() + "/api/v1/services/audio/tts/SpeechSynthesizer",
-        data=json.dumps({"model": config.COSYVOICE_MODEL, "input": inp},
+        # model 为空 = v0.9 早期数据，那时统一用 flash 复刻，按 flash 合成才匹配
+        data=json.dumps({"model": model or "cosyvoice-v3.5-flash", "input": inp},
                         ensure_ascii=False).encode(),
         headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
         method="POST",

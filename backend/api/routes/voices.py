@@ -111,7 +111,17 @@ def list_voices():
             (g.user_id,)).fetchall())
     self_cnt  = sum(1 for r in rows if r["voice_kind"] == "self")
     other_cnt = sum(1 for r in rows if r["voice_kind"] == "other")
+
+    # 当前复刻通道及其能力（前端据此决定是否显示方言选择）
+    from backend.db.database import get_setting
+    cur_provider = get_setting("voice_clone_provider", config.TTS_PROVIDER)
+    if cur_provider not in ("aliyun", "volc"):
+        cur_provider = "aliyun"
+
     return jsonify({
+        "provider": cur_provider,
+        # 火山无指令控制能力，方言无法通过参数指定
+        "supports_dialect": cur_provider == "aliyun",
         "voices": rows,
         "max": config.VOICE_MAX_PER_USER,
         "cost": config.VOICE_CLONE_COST,
@@ -214,9 +224,10 @@ def create_voice():
     with get_db() as conn:
         conn.execute(
             """INSERT INTO user_voices (id, user_id, voice_kind, name, provider,
-                                        status, sample_path, instruction, consent_at)
-               VALUES (?, ?, ?, ?, ?, 'training', ?, ?, ?)""",
+                                        status, sample_path, instruction, model, consent_at)
+               VALUES (?, ?, ?, ?, ?, 'training', ?, ?, ?, ?)""",
             (voice_id, g.user_id, kind, name, provider, str(path), instruction,
+             config.COSYVOICE_MODEL if provider == "aliyun" else "",
              None if kind == "self" else _now()),   # 他人声音记录授权确认时间（存证）
         )
 
@@ -231,6 +242,8 @@ def create_voice():
                     "UPDATE user_voices SET voice_id=?, status='training' WHERE id=?",
                     (speaker, voice_id))
             status_now, msg = "training", "已提交火山训练，约1分钟后在列表刷新查看"
+            if instruction:
+                msg += "（注意：火山通道不支持方言指令，需方言请改用阿里云通道）"
         else:
             # 阿里云 CosyVoice：同步返回，即刻可用
             from backend.services.media import aliyun_voice_clone
@@ -310,7 +323,7 @@ def preview_voice(voice_id):
 
     with get_db() as conn:
         v = row_to_dict(conn.execute(
-            "SELECT voice_id, status, instruction FROM user_voices WHERE id=? AND user_id=?",
+            "SELECT voice_id, status, instruction, model FROM user_voices WHERE id=? AND user_id=?",
             (voice_id, g.user_id)).fetchone())
     if not v:
         return jsonify({"error": "声音不存在"}), 404
@@ -321,7 +334,8 @@ def preview_voice(voice_id):
     from backend.services.media import tts_synthesize
     try:
         audio = tts_synthesize(text[:200], voice_id=v["voice_id"],
-                               instruction=v.get("instruction") or "")
+                               instruction=v.get("instruction") or "",
+                               model=v.get("model") or "")
     except RuntimeError as e:
         return jsonify({"error": f"合成失败：{e}"}), 503
 
