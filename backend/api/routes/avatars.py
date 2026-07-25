@@ -262,6 +262,52 @@ def delete_avatar(avatar_id):
     return jsonify({"ok": True})
 
 
+@avatars_bp.get("/<avatar_id>/qrcode")
+@require_auth
+def get_share_qrcode(avatar_id):
+    """
+    生成小程序码：微信扫码直接打开小程序并自动带入共享码。
+    scene 携带 share_code，小程序 onLoad 解出后透传给 webview 自动绑定。
+    需已发布正式版才能被微信扫描（开发版仅开发者工具可测）。
+    """
+    import requests as _req
+    from flask import Response
+    from backend.api.routes.auth import _wx_get_access_token
+
+    with get_db() as conn:
+        avatar = row_to_dict(conn.execute(
+            "SELECT share_code FROM avatars WHERE id=? AND creator_id=?",
+            (avatar_id, g.user_id)).fetchone())
+    if not avatar:
+        return jsonify({"error": "替身不存在或无权限"}), 404
+    code = avatar.get("share_code") or ""
+    if not code:
+        return jsonify({"error": "该替身还没有共享码"}), 400
+
+    token, err = _wx_get_access_token()
+    if not token:
+        return jsonify({"error": f"微信接口不可用：{err}"}), 503
+
+    try:
+        r = _req.post(
+            f"https://api.weixin.qq.com/wxa/getwxacodeunlimit?access_token={token}",
+            json={
+                "scene": code[:32],            # scene 上限 32 字符
+                "page": "pages/home/home",     # 必须是已发布的页面
+                "width": 280,
+                "check_path": False,           # 开发版也能生成
+                "env_version": "release",      # release | trial | develop
+            },
+            timeout=15,
+        )
+        # 成功返回图片二进制；失败返回 JSON
+        if r.headers.get("Content-Type", "").startswith("image"):
+            return Response(r.content, mimetype="image/png")
+        return jsonify({"error": f"生成小程序码失败：{r.text[:200]}"}), 503
+    except Exception as e:
+        return jsonify({"error": f"生成小程序码失败：{e}"}), 503
+
+
 @avatars_bp.post("/<avatar_id>/share")
 @require_auth
 def get_share_code(avatar_id):

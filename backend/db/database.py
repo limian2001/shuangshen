@@ -342,6 +342,12 @@ def _run_migrations(conn: sqlite3.Connection):
         "ALTER TABLE user_voices ADD COLUMN instruction TEXT DEFAULT ''",
         # 替身绑定的账号级声音（NULL/空 = 关闭，不显示小喇叭）
         "ALTER TABLE avatars ADD COLUMN user_voice_id TEXT DEFAULT NULL",
+        # v1.6: 运行时设置 KV（admin 可改，立即生效，不用重启/改env）
+        """CREATE TABLE IF NOT EXISTS app_settings (
+            key        TEXT PRIMARY KEY,
+            value      TEXT NOT NULL,
+            updated_at TEXT DEFAULT (datetime('now'))
+        )""",
         # v1.4: 对话链路 Trace（话题检测/记忆检索/Prompt/LLM 全过程，admin 可查）
         """CREATE TABLE IF NOT EXISTS chat_traces (
             id          TEXT PRIMARY KEY,
@@ -383,3 +389,25 @@ def row_to_dict(row) -> dict:
 
 def rows_to_list(rows) -> list:
     return [dict(r) for r in rows]
+
+
+# ─────────────────────────────────────────────
+# 运行时设置（admin 可改，每次读库，立即生效）
+# ─────────────────────────────────────────────
+
+def get_setting(key: str, default: str = "") -> str:
+    try:
+        with get_db() as conn:
+            row = conn.execute("SELECT value FROM app_settings WHERE key=?", (key,)).fetchone()
+        return row[0] if row else default
+    except Exception:
+        return default
+
+
+def set_setting(key: str, value: str):
+    with get_db() as conn:
+        conn.execute(
+            """INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, datetime('now'))
+               ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=datetime('now')""",
+            (key, value),
+        )

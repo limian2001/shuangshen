@@ -2,8 +2,8 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="ss-build" content="20260718-5">
-<script>const SS_BUILD = '20260718-5'; console.log('ss-build: ' + SS_BUILD);</script>
+<meta name="ss-build" content="20260718-7">
+<script>const SS_BUILD = '20260718-7'; console.log('ss-build: ' + SS_BUILD);</script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>替身 · Shuangshen</title>
 <style>
@@ -1584,6 +1584,17 @@ window.onload = () => {
     showLogin();
   }
 
+  // 扫小程序码进入：自动绑定该替身（需已登录）
+  const bindCode = params.get('bind');
+  if (bindCode) {
+    if (token) {
+      setTimeout(() => autoBindByCode(bindCode), 600);
+    } else {
+      setTimeout(() => toast('登录后即可绑定该替身', 'info'), 800);
+      sessionStorage.setItem('ss_pending_bind', bindCode);
+    }
+  }
+
   // 渲染构建版本号（登录页 + 侧边栏小字）；同时拉后端版本做一致性校验
   document.querySelectorAll('.ss-build-text').forEach(el => { el.textContent = SS_BUILD; });
   fetch(API + '/api/version').then(r => r.json()).then(v => {
@@ -1664,6 +1675,9 @@ function saveAuth(res) {
   currentUser = { user_id: res.user_id, display_name: res.display_name };
   localStorage.setItem('ss_token', token);
   localStorage.setItem('ss_user', JSON.stringify(currentUser));
+  // 扫码进来但当时未登录 → 登录后补绑
+  const pending = sessionStorage.getItem('ss_pending_bind');
+  if (pending) setTimeout(() => autoBindByCode(pending), 500);
 }
 function doLogout() {
   localStorage.removeItem('ss_token');
@@ -1811,26 +1825,35 @@ function openAvatarChat(avatar) {
   showAvatarPage('chat');
 }
 
-// 打开分享弹窗（二维码 + 共享码）
-function openAvatarShare(avatar) {
+// 打开分享弹窗（小程序码 + 共享码）
+// 小程序码由微信官方接口生成，对方微信扫码 → 直接打开本小程序 → 自动绑定该替身
+async function openAvatarShare(avatar) {
   setCurrentAvatar(avatar);
   const code = avatar.share_code || '';
   document.getElementById('share-modal-avatar-name').textContent = avatar.name;
   document.getElementById('share-modal-code').textContent = code;
+  document.getElementById('share-modal').classList.add('open');
 
   const qrEl = document.getElementById('share-modal-qr');
-  qrEl.innerHTML = '';
-  if (window.QRCode && code) {
-    new QRCode(qrEl, {
-      text: code, width: 180, height: 180,
-      colorDark: '#534AB7', colorLight: '#ffffff',
-      correctLevel: QRCode.CorrectLevel.M,
+  qrEl.innerHTML = '<div style="width:180px;height:180px;background:var(--bg);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--text-3)">小程序码生成中…</div>';
+  try {
+    const resp = await fetch(API + `/api/avatars/${avatar.id}/qrcode`, {
+      headers: { Authorization: 'Bearer ' + token },
     });
-  } else {
-    qrEl.innerHTML = '<div style="width:180px;height:180px;background:var(--bg);border-radius:8px;border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--text-3)">二维码加载中…</div>';
+    if (!resp.ok) throw new Error((await resp.json()).error || '生成失败');
+    const img = document.createElement('img');
+    img.src = URL.createObjectURL(await resp.blob());
+    img.style.cssText = 'width:180px;height:180px;border-radius:8px';
+    qrEl.innerHTML = '';
+    qrEl.appendChild(img);
+  } catch (e) {
+    // 生成失败（如小程序未发布正式版）→ 提示用共享码，不影响主流程
+    qrEl.innerHTML = `<div style="width:180px;height:180px;background:var(--bg);border-radius:8px;border:1px dashed var(--border);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:12px;text-align:center">
+      <div style="font-size:22px">🔑</div>
+      <div style="font-size:12px;color:var(--text-3);line-height:1.6">小程序码暂不可用<br>请把下方共享码发给对方</div>
+    </div>`;
+    console.warn('小程序码生成失败:', e.message);
   }
-
-  document.getElementById('share-modal').classList.add('open');
 }
 
 function closeShareModal() {
@@ -2005,6 +2028,18 @@ async function doUnbindAvatarById(avatarId, name) {
     }
   } catch (e) {
     toast('解绑失败：' + e.message, 'error');
+  }
+}
+
+// 扫码/待处理的共享码 → 自动绑定
+async function autoBindByCode(code) {
+  if (!code || !token) return;
+  const res = await api('POST', '/api/avatars/join/' + encodeURIComponent(code));
+  if (res && (res.avatar_id || res.message)) {
+    toast(`✅ 已绑定替身「${res.avatar_name || ''}」，可以开始对话了`, 'success');
+    sessionStorage.removeItem('ss_pending_bind');
+    showPage('received');
+    loadReceived();
   }
 }
 

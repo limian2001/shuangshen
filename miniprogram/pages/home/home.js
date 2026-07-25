@@ -21,6 +21,12 @@ Page({
       return;
     }
 
+    // 扫小程序码进入：scene 里是替身共享码 → 透传给 webview 自动绑定
+    if (options && options.scene) {
+      const scene = decodeURIComponent(options.scene);
+      if (scene) app.globalData.pendingBindCode = scene;
+    }
+
     // 记录分享链接中的邀请码
     if (options && options.ref) {
       app.globalData.pendingRefCode = options.ref;
@@ -60,7 +66,11 @@ Page({
     const uid     = encodeURIComponent(user.user_id || '');
     const baseUrl = app.globalData.apiBase;
     const refParam = ref ? `&ref=${encodeURIComponent(ref)}` : '';
-    const url = `${baseUrl}/app?token=${token}&name=${name}&uid=${uid}${refParam}`;
+    // 扫码带入的共享码 → 网页端自动填入并绑定
+    const bind = app.globalData.pendingBindCode || '';
+    const bindParam = bind ? `&bind=${encodeURIComponent(bind)}` : '';
+    if (bind) app.globalData.pendingBindCode = '';
+    const url = `${baseUrl}/app?token=${token}&name=${name}&uid=${uid}${refParam}${bindParam}`;
 
     this.setData({ isLoggedIn: true, webviewUrl: url });
   },
@@ -76,7 +86,7 @@ Page({
     this.setData({
       isLoggedIn: true,
       isGuest: true,
-      webviewUrl: `${baseUrl}/app?guest=1`,
+      webviewUrl: `${baseUrl}/app?guest=1${app.globalData.pendingBindCode ? '&bind=' + encodeURIComponent(app.globalData.pendingBindCode) : ''}`,
     });
   },
 

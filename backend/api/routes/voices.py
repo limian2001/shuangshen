@@ -85,6 +85,22 @@ def get_sample(voice_id):
 @voices_bp.get("")
 @require_auth
 def list_voices():
+    # 火山声音是异步训练：列表页顺带轮询 training 中的，完成即转 ready
+    with get_db() as conn:
+        pending = rows_to_list(conn.execute(
+            "SELECT id, voice_id FROM user_voices WHERE user_id=? AND provider='volc' AND status='training' AND voice_id != ''",
+            (g.user_id,)).fetchall())
+    for p in pending:
+        try:
+            from backend.services.media import voice_clone_status
+            st = voice_clone_status(p["voice_id"])
+            if st["status"] in ("success", "failed"):
+                with get_db() as conn:
+                    conn.execute("UPDATE user_voices SET status=? WHERE id=?",
+                                 ("ready" if st["status"] == "success" else "failed", p["id"]))
+        except Exception:
+            pass
+
     with get_db() as conn:
         rows = rows_to_list(conn.execute(
             """SELECT id, voice_kind, name, status, provider, instruction, consent_at, created_at,
@@ -167,6 +183,30 @@ def create_voice():
                             "need_coins": True}), 402
         charged = config.VOICE_CLONE_COST
 
+    # 复刻通道：运行时设置（admin 可切换，立即生效）> 环境变量默认
+    from backend.db.database import get_setting
+    provider = get_setting("voice_clone_provider", config.TTS_PROVIDER)
+    if provider not in ("aliyun", "volc"):
+        provider = "aliyun"
+
+    # 火山通道：需从 VOLC_SPEAKER_IDS 池分配空闲 S_ 槽位
+    volc_speaker = None
+    if provider == "volc":
+        pool = [s.strip() for s in config.VOLC_SPEAKER_IDS.split(",") if s.strip()]
+        if not pool:
+            return jsonify({"error": "火山通道未配置 speaker 池（VOLC_SPEAKER_IDS）"}), 503
+        with get_db() as conn:
+            used = {r[0] for r in conn.execute(
+                "SELECT voice_id FROM user_voices WHERE provider='volc' AND voice_id != ''"
+            ).fetchall()}
+            used |= {r[0] for r in conn.execute(
+                "SELECT voice_model_id FROM avatars WHERE voice_model_id LIKE 'S_%'"
+            ).fetchall()}
+        free = [s for s in pool if s not in used]
+        if not free:
+            return jsonify({"error": "火山音色槽位已用完，请切回阿里云通道或释放槽位"}), 503
+        volc_speaker = free[0]
+
     # 落库 + 存样本
     voice_id = new_id()
     path = VOICE_DIR / f"{voice_id}{ext}"
@@ -176,18 +216,30 @@ def create_voice():
             """INSERT INTO user_voices (id, user_id, voice_kind, name, provider,
                                         status, sample_path, instruction, consent_at)
                VALUES (?, ?, ?, ?, ?, 'training', ?, ?, ?)""",
-            (voice_id, g.user_id, kind, name, config.TTS_PROVIDER, str(path), instruction,
+            (voice_id, g.user_id, kind, name, provider, str(path), instruction,
              None if kind == "self" else _now()),   # 他人声音记录授权确认时间（存证）
         )
 
     # 调用供应商复刻
     try:
-        from backend.services.media import aliyun_voice_clone
-        provider_voice_id = aliyun_voice_clone(_sample_url(voice_id), prefix="yanji")
-        with get_db() as conn:
-            conn.execute(
-                "UPDATE user_voices SET voice_id=?, status='ready' WHERE id=?",
-                (provider_voice_id, voice_id))
+        if provider == "volc":
+            # 火山 V3：上传即训练（异步），先记 training，列表页轮询转 ready
+            from backend.services.media import voice_clone_upload
+            speaker = voice_clone_upload(volc_speaker, audio_bytes, f"sample{ext}")
+            with get_db() as conn:
+                conn.execute(
+                    "UPDATE user_voices SET voice_id=?, status='training' WHERE id=?",
+                    (speaker, voice_id))
+            status_now, msg = "training", "已提交火山训练，约1分钟后在列表刷新查看"
+        else:
+            # 阿里云 CosyVoice：同步返回，即刻可用
+            from backend.services.media import aliyun_voice_clone
+            provider_voice_id = aliyun_voice_clone(_sample_url(voice_id), prefix="yanji")
+            with get_db() as conn:
+                conn.execute(
+                    "UPDATE user_voices SET voice_id=?, status='ready' WHERE id=?",
+                    (provider_voice_id, voice_id))
+            status_now, msg = "ready", "声音复刻成功"
     except Exception as e:
         with get_db() as conn:
             conn.execute("UPDATE user_voices SET status='failed' WHERE id=?", (voice_id,))
@@ -200,11 +252,10 @@ def create_voice():
         except Exception:
             pass
         from backend.services.llm_provider import alert
-        alert("声音复刻失败", f"user={g.user_id[:8]} kind={kind}: {e}")
+        alert("声音复刻失败", f"user={g.user_id[:8]} kind={kind} provider={provider}: {e}")
         return jsonify({"error": f"声音复刻失败：{e}"}), 503
 
-    return jsonify({"id": voice_id, "status": "ready", "name": name,
-                    "message": "声音复刻成功"})
+    return jsonify({"id": voice_id, "status": status_now, "name": name, "message": msg})
 
 
 def _now() -> str:

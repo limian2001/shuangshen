@@ -7,6 +7,7 @@ App({
     userInfo: null,
     apiBase: 'https://app.mianmianlife.com',
     pendingRefCode: '',   // 从分享链接带入的邀请码，登录后传给 home/webview
+    pendingBindCode: '',  // 扫小程序码带入的替身共享码，登录后自动绑定
   },
 
   onLaunch() {

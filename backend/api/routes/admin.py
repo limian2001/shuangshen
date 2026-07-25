@@ -549,3 +549,46 @@ def get_trace(message_id):
         "created_at":   row["created_at"],
         "trace":        trace,
     })
+
+
+# ─────────────────────────────────────────────
+# 运行时设置（改库即生效，无需重启）
+# ─────────────────────────────────────────────
+
+# 可通过 admin 修改的设置白名单：key -> (合法值, 默认值来源说明)
+_SETTINGS_WHITELIST = {
+    "voice_clone_provider": {"values": ["aliyun", "volc"], "label": "声音复刻通道"},
+}
+
+
+@admin_bp.get("/settings")
+@require_admin
+def get_settings():
+    from backend.db.database import get_setting
+    from backend.core.config import config as _cfg
+    out = {}
+    for key, meta in _SETTINGS_WHITELIST.items():
+        default = _cfg.TTS_PROVIDER if key == "voice_clone_provider" else ""
+        out[key] = {
+            "value": get_setting(key, default),
+            "options": meta["values"],
+            "label": meta["label"],
+        }
+    return jsonify(out)
+
+
+@admin_bp.post("/settings")
+@require_admin
+def update_settings():
+    from backend.db.database import set_setting
+    data = request.get_json() or {}
+    key = (data.get("key") or "").strip()
+    value = (data.get("value") or "").strip()
+    meta = _SETTINGS_WHITELIST.get(key)
+    if not meta:
+        return jsonify({"error": f"不支持的设置项: {key}"}), 400
+    if value not in meta["values"]:
+        return jsonify({"error": f"{key} 只能是 {meta['values']} 之一"}), 400
+    set_setting(key, value)
+    print(f"[ADMIN] 设置已更新: {key} = {value}")
+    return jsonify({"ok": True, "key": key, "value": value})
