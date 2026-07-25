@@ -51,7 +51,7 @@ VALID_RELATIONSHIPS = {
     "boyfriend", "girlfriend",
     "elder_brother", "younger_brother",
     "elder_sister", "younger_sister",
-    "friend", "bestie", "custom",
+    "friend", "bestie", "husband", "wife", "colleague", "custom",
 }
 
 

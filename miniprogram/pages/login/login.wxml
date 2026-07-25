@@ -11,6 +11,12 @@
     <view class="checking-tip">正在登录…</view>
   </view>
 
+  <!-- 已手动退出：需主动点击才登录（不自动静默登录） -->
+  <view class="btn-wrap" wx:if="{{step === 'manual_login'}}">
+    <button class="phone-btn" bindtap="onTapLogin">微信登录</button>
+    <text class="tip-sub">你已退出登录，点击上方按钮重新登录</text>
+  </view>
+
   <!-- 需要手机号授权（新用户） -->
   <view class="btn-wrap" wx:if="{{step === 'need_phone'}}">
     <!-- 昵称输入（type="nickname" 可触发微信头像昵称填充） -->

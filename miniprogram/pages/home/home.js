@@ -13,8 +13,10 @@ Page({
 
   onLoad(options) {
     // 网页端"退出登录"跳转回来：清除小程序侧 token，回到落地页
+    // 并设"已手动退出"标记 → 登录页不再自动静默登录（否则凭 openid 会立刻又进去）
     if (options && options.logout === '1') {
       app.clearAuth();
+      wx.setStorageSync('yj_logged_out', true);
       this.setData({ isLoggedIn: false, isGuest: false, webviewUrl: '' });
       return;
     }

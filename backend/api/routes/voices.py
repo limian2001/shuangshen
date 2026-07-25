@@ -93,12 +93,20 @@ def list_voices():
                FROM user_voices v
                WHERE user_id = ? ORDER BY created_at""",
             (g.user_id,)).fetchall())
+    self_cnt  = sum(1 for r in rows if r["voice_kind"] == "self")
+    other_cnt = sum(1 for r in rows if r["voice_kind"] == "other")
     return jsonify({
         "voices": rows,
         "max": config.VOICE_MAX_PER_USER,
         "cost": config.VOICE_CLONE_COST,
         "free": config.VOICE_CLONE_FREE,
         "balance": get_balance(g.user_id),
+        "limits": {
+            "self":  {"used": self_cnt,  "max": config.VOICE_MAX_SELF,
+                      "free_quota": config.VOICE_FREE_SELF},
+            "other": {"used": other_cnt, "max": config.VOICE_MAX_OTHER,
+                      "free_quota": config.VOICE_FREE_OTHER},
+        },
     })
 
 
@@ -126,13 +134,16 @@ def create_voice():
     if kind == "other" and request.form.get("consent") != "1":
         return jsonify({"error": "复刻他人声音需先确认授权"}), 400
 
-    # 同类型只能有 1 个
+    # 数量上限：self 最多 VOICE_MAX_SELF 份，other 最多 VOICE_MAX_OTHER 份
+    kind_max  = config.VOICE_MAX_SELF if kind == "self" else config.VOICE_MAX_OTHER
+    kind_free = config.VOICE_FREE_SELF if kind == "self" else config.VOICE_FREE_OTHER
     with get_db() as conn:
-        exists = conn.execute(
-            "SELECT id FROM user_voices WHERE user_id=? AND voice_kind=?",
-            (g.user_id, kind)).fetchone()
-    if exists:
-        return jsonify({"error": f"已存在{'本人' if kind=='self' else '他人'}声音，请先删除再重新复刻"}), 400
+        kind_count = conn.execute(
+            "SELECT COUNT(*) FROM user_voices WHERE user_id=? AND voice_kind=?",
+            (g.user_id, kind)).fetchone()[0]
+    if kind_count >= kind_max:
+        label = "本人" if kind == "self" else "他人"
+        return jsonify({"error": f"{label}声音最多 {kind_max} 份，请先删除一份再复刻"}), 400
 
     audio_file = request.files.get("audio")
     if not audio_file:
@@ -146,9 +157,10 @@ def create_voice():
     if len(audio_bytes) > MAX_BYTES:
         return jsonify({"error": "音频文件过大（上限 10MB），请裁剪后重传"}), 400
 
-    # 扣费（限时免费时跳过）
+    # 扣费：超出免费额度的份数才计费（如第 2 份自己声音）；限时免费开关开时全免
     charged = 0
-    if not config.VOICE_CLONE_FREE:
+    need_pay = (kind_count >= kind_free)     # 已有份数 ≥ 免费额度 → 这一份要付费
+    if need_pay and not config.VOICE_CLONE_FREE:
         ok, bal = spend_coins(g.user_id, config.VOICE_CLONE_COST, "voice_clone")
         if not ok:
             return jsonify({"error": f"言己币不足（需 {config.VOICE_CLONE_COST}，当前 {bal}）",

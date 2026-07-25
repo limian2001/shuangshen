@@ -2,8 +2,8 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="ss-build" content="20260718-3">
-<script>const SS_BUILD = '20260718-3'; console.log('ss-build: ' + SS_BUILD);</script>
+<meta name="ss-build" content="20260718-5">
+<script>const SS_BUILD = '20260718-5'; console.log('ss-build: ' + SS_BUILD);</script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>替身 · Shuangshen</title>
 <style>
@@ -209,8 +209,17 @@ select { cursor: pointer; }
 #voice-recording-overlay .overlay-wave span { width: 4px; height: 4px; border-radius: 2px; background: #4ade80; transition: height .06s linear; }
 .msg-audio { margin-top: 5px; }
 .msg-audio audio { width: 100%; max-width: 220px; height: 32px; border-radius: 16px; }
-.msg-voice-toggle { font-size: 11px; color: var(--purple); cursor: pointer; margin-top: 2px; display: inline-block; opacity: .8; }
+.msg-voice-toggle { font-size: 11px; color: var(--purple); cursor: pointer; margin-top: 2px; display: none; opacity: .8; }
 .msg-voice-toggle:hover { opacity: 1; }
+/* 替身有可用声音时（容器加 has-voice），所有 bot 消息统一显示小喇叭 */
+#chat-messages.has-voice .msg-voice-toggle { display: inline-block; }
+/* 微信式语音进度条：保留文字，气泡下方出现播放条 */
+.msg-voice-player { display: flex; align-items: center; gap: 8px; margin-top: 6px;
+  background: var(--purple-light, #edebfa); border-radius: 14px; padding: 6px 12px; max-width: 260px; }
+.vpl-btn { cursor: pointer; font-size: 15px; color: var(--purple); width: 20px; text-align: center; flex-shrink: 0; user-select: none; }
+.vpl-track { flex: 1; height: 4px; background: rgba(83,74,183,.2); border-radius: 2px; cursor: pointer; position: relative; }
+.vpl-fill { height: 100%; width: 0; background: var(--purple); border-radius: 2px; transition: width .2s linear; }
+.vpl-time { font-size: 11px; color: var(--text-3); flex-shrink: 0; font-family: monospace; }
 .voice-sample-list { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
 .voice-sample-item { display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: var(--bg); border-radius: 8px; border: 1px solid var(--border); font-size: 13px; }
 .vs-pending,.vs-uploading,.vs-training { background: var(--purple-light); color: var(--purple); font-size: 11px; padding: 2px 7px; border-radius: 4px; }
@@ -684,12 +693,15 @@ body.is-mobile .row .field   { width: 100%; }
               <option value="mother">母亲</option>
               <option value="boyfriend">男友</option>
               <option value="girlfriend">女友</option>
+              <option value="husband">丈夫</option>
+              <option value="wife">妻子</option>
               <option value="elder_brother">哥哥</option>
               <option value="younger_brother">弟弟</option>
               <option value="elder_sister">姐姐</option>
               <option value="younger_sister">妹妹</option>
               <option value="friend">朋友</option>
               <option value="bestie">闺蜜</option>
+              <option value="colleague">同事</option>
               <option value="custom">自定义</option>
             </select>
           </div>
@@ -1089,7 +1101,10 @@ body.is-mobile .row .field   { width: 100%; }
       </div>
 
       <div class="card" style="margin-top:14px">
-        <div class="card-title">导入历史</div>
+        <div class="card-title" style="display:flex;align-items:center;justify-content:space-between">
+          <span>导入历史</span>
+          <button class="btn btn-secondary btn-sm" onclick="refreshIngestJobs(this)" style="font-size:12px">🔄 刷新状态</button>
+        </div>
         <div id="ingest-jobs-list"><div class="empty"><p>暂无导入记录</p></div></div>
       </div>
     </div>
@@ -1116,12 +1131,15 @@ body.is-mobile .row .field   { width: 100%; }
               <option value="mother">母亲</option>
               <option value="boyfriend">男友</option>
               <option value="girlfriend">女友</option>
+              <option value="husband">丈夫</option>
+              <option value="wife">妻子</option>
               <option value="elder_brother">哥哥</option>
               <option value="younger_brother">弟弟</option>
               <option value="elder_sister">姐姐</option>
               <option value="younger_sister">妹妹</option>
               <option value="friend">朋友</option>
               <option value="bestie">闺蜜</option>
+              <option value="colleague">同事</option>
               <option value="custom">自定义</option>
             </select>
           </div>
@@ -1410,6 +1428,9 @@ const REL_PRESETS = {
   younger_sister:  "我是你妹妹，跟你关系特别好，什么话都喜欢跟你说，偶尔也找你撒个娇。",
   friend:          "我是你的老朋友，我们认识很久了，相处很自然放松，什么话都能聊，不用顾虑太多。",
   bestie:          "我是你的闺蜜，什么心里话都跟你说，你开心我就开心，你难过我陪你。平时一起吐槽、分享秘密，超级亲近。",
+  husband:         "我是你丈夫，我们一起生活了很多年，彼此很了解。我关心你和这个家，说话直接但真诚，遇事有商有量。",
+  wife:            "我是你妻子，我们一起生活了很多年，彼此很了解。我关心你的身体和情绪，家里大小事都惦记着，说话温和也会唠叨几句。",
+  colleague:       "我是你同事，我们在工作上配合很多年，彼此信任。平时聊工作也聊生活，说话务实，偶尔互相调侃。",
   custom:          "",
 };
 
@@ -1423,6 +1444,8 @@ const COUNTERPART_OPTIONS = {
   younger_brother: [{v:'elder_brother', l:'哥哥'}, {v:'elder_sister', l:'姐姐'}],
   elder_sister:    [{v:'younger_brother', l:'弟弟'}, {v:'younger_sister', l:'妹妹'}],
   younger_sister:  [{v:'elder_brother', l:'哥哥'}, {v:'elder_sister', l:'姐姐'}],
+  husband:         [{v:'wife', l:'妻子'}],
+  wife:            [{v:'husband', l:'丈夫'}],
 };
 
 // ─── 多称呼输入组件 ─────────────────────────────────────────────────────────
@@ -1484,6 +1507,9 @@ const ADDRESS_HINTS = {
   girlfriend:      {to:'如：宝贝、亲爱的', from:'如：宝贝、老婆'},
   friend:          {to:'如：小王、阿华', from:'如：老李'},
   bestie:          {to:'如：宝子、亲', from:'如：宝子、我的'},
+  husband:         {to:'如：老婆、宝贝', from:'如：老公、他爸'},
+  wife:            {to:'如：老公、亲爱的', from:'如：老婆、她妈'},
+  colleague:       {to:'如：王工、李姐', from:'如：小张、老刘'},
   custom:          {to:'我怎么叫对方', from:'对方怎么叫我'},
 };
 
@@ -2052,7 +2078,8 @@ async function loadChatHistory() {
     }
   }
 
-  // ③ 检查是否有声音克隆（不阻塞页面加载）
+  // ③ 检查声音状态（不阻塞页面加载）；小喇叭显隐由容器 class 控制，
+  //    checkAvatarVoice 内部会切换 has-voice class，历史/新消息统一生效
   checkAvatarVoice();
 }
 
@@ -2089,7 +2116,6 @@ async function sendMessage() {
 }
 
 let _msgIdx = 0;
-const _msgVoiceMode = {};
 
 function appendMsg(role, content, animate, intercepted) {
   const box = document.getElementById('chat-messages');
@@ -2101,13 +2127,20 @@ function appendMsg(role, content, animate, intercepted) {
   div.dataset.msgIdx = idx;
 
   const bubbleHtml = `${esc(renderEmoji(content)).replace(/\n/g,'<br>')}${intercepted ? '<span class="intercept-badge">已拦截</span>' : ''}`;
-  const aiBadge = isUser ? '' : '<span style="display:block;font-size:10px;color:var(--text-3);margin-top:3px;text-align:right">AI 生成</span>';
+  // 左对齐：跟随 bot 气泡，避免视觉上像是标在右侧用户消息上（曾引起误解）
+  const aiBadge = isUser ? '' : '<span style="display:block;font-size:10px;color:var(--text-3);margin-top:3px;text-align:left">AI 生成</span>';
 
-  // TTS 控件：只在替身声音克隆成功时显示小喇叭（播放模仿本人的声音）
-  // 合规要求："AI 生成"标注在所有 bot 消息上始终显示，不被喇叭替换
-  const voiceCtrl = (!isUser && _avatarHasVoice)
-    ? `<div class="msg-audio" id="audio-wrap-${idx}" style="display:none"><audio id="audio-${idx}" controls></audio></div><span class="msg-voice-toggle" data-idx="${idx}">🔊 点击播放语音</span>${aiBadge}`
-    : aiBadge;
+  // TTS 控件：对所有 bot 消息渲染（历史消息也能点播），
+  // 是否可见由 #chat-messages.has-voice 容器 class 控制（替身有声音才显示）
+  // 播放条微信式：保留文字，下方进度条可暂停/续播/点击跳转
+  const voiceCtrl = !isUser
+    ? `<div class="msg-voice-player" id="vplayer-${idx}">
+         <span class="vpl-btn" id="vpl-btn-${idx}" onclick="toggleTTSPlay(${idx})">▶</span>
+         <div class="vpl-track" onclick="seekTTS(event, ${idx})"><div class="vpl-fill" id="vpl-fill-${idx}"></div></div>
+         <span class="vpl-time" id="vpl-time-${idx}">0:00</span>
+       </div>
+       <span class="msg-voice-toggle" data-idx="${idx}">🔊 播放语音</span>${aiBadge}`
+    : '';
 
   div.innerHTML = `
     <div class="msg-avatar">${initials}</div>
@@ -2119,11 +2152,12 @@ function appendMsg(role, content, animate, intercepted) {
   if (animate) div.style.animation = 'none';
   box.appendChild(div);
 
-  // 绑定 toggle 事件（按需加载：用户点击喇叭才合成语音）
-  if (!isUser && _avatarHasVoice) {
+  // 绑定喇叭事件（按需合成：点击才调 TTS，不点不产生费用）
+  if (!isUser) {
     const toggleEl = div.querySelector('.msg-voice-toggle');
-    if (toggleEl) toggleEl.addEventListener('click', () => toggleMsgVoice(idx, content));
-    _msgVoiceMode[idx] = 'text';  // 默认文字模式，不自动调用TTS
+    if (toggleEl) toggleEl.addEventListener('click', () => startMsgVoice(idx, content));
+    const player = div.querySelector('.msg-voice-player');
+    if (player) player.style.display = 'none';   // 合成后才出现
   }
 
   scrollBottom();
@@ -2625,6 +2659,14 @@ async function doReparse() {
   }
 }
 
+// 手动刷新导入状态（解析是后台任务，用户可随时确认是否完成，不必守着页面）
+async function refreshIngestJobs(btn) {
+  if (btn) { btn.disabled = true; btn.textContent = '刷新中…'; }
+  await loadIngestJobs();
+  if (btn) { btn.disabled = false; btn.textContent = '🔄 刷新状态'; }
+  toast('状态已刷新', 'success');
+}
+
 async function loadIngestJobs() {
   if (!currentAvatar) return;
 
@@ -2910,7 +2952,8 @@ function relLabel(r) {
     boyfriend:'男友', girlfriend:'女友',
     elder_brother:'哥哥', younger_brother:'弟弟',
     elder_sister:'姐姐', younger_sister:'妹妹',
-    friend:'朋友', custom:'自定义'
+    friend:'朋友', bestie:'闺蜜',
+    husband:'丈夫', wife:'妻子', colleague:'同事', custom:'自定义'
   }[r] || r;
 }
 function relEmoji(r) {
@@ -2919,7 +2962,8 @@ function relEmoji(r) {
     boyfriend:'👨', girlfriend:'👩',
     elder_brother:'👨', younger_brother:'👦',
     elder_sister:'👩', younger_sister:'👧',
-    friend:'🤝', custom:'✨'
+    friend:'🤝', bestie:'👭',
+    husband:'👨', wife:'👩', colleague:'💼', custom:'✨'
   }[r] || '✨';
 }
 function memTypeLabel(t) { return {opinion:'观点',episode:'回忆',style:'风格',wechat:'微信导入'}[t] || t; }
@@ -3750,6 +3794,7 @@ function _getSupportedMime() { return _sttGetMime(); }
 
 // ─── 我的声音（账号级复刻） ──────────────────────────────────
 let _voiceKind = 'self';
+let _voiceLimits = null, _voiceFree = true, _voiceCost = 1000;
 let _voiceBlob = null, _voiceFileName = '';
 let _voiceConsent = false;
 const _vrec = { mr: null, chunks: [], stream: null, timer: null, startMs: 0 };
@@ -3758,11 +3803,6 @@ async function loadMyVoices() {
   if (!requireLogin()) return;
   const d = await api('GET', '/api/voices');
   if (!d) return;
-
-  const tag = document.getElementById('voice-cost-tag');
-  if (tag) tag.innerHTML = d.free
-    ? '<span style="color:#16a34a">限时免费</span>'
-    : `<span style="color:var(--text-3)">${d.cost} 言己币 / 次（余额 ${d.balance}）</span>`;
 
   const el = document.getElementById('myvoices-list');
   el.innerHTML = d.voices.length ? d.voices.map(v => {
@@ -3799,18 +3839,39 @@ async function loadMyVoices() {
     </div>`;
   }).join('') : '<div class="empty"><p>还没有复刻声音，在下方创建第一个</p></div>';
 
-  // 达到上限时隐藏创建卡片
-  const kinds = d.voices.map(v => v.voice_kind);
-  const full = kinds.includes('self') && kinds.includes('other');
-  document.getElementById('voice-create-card').style.display = full ? 'none' : 'block';
-  if (!full) {
-    // 已有的类型禁用
+  // 按各类型额度控制创建卡片：self 可 2 份、other 1 份
+  _voiceLimits = d.limits || { self: { used: 0, max: 2, free_quota: 1 },
+                               other: { used: 0, max: 1, free_quota: 1 } };
+  _voiceFree = d.free; _voiceCost = d.cost;
+  const selfFull  = _voiceLimits.self.used  >= _voiceLimits.self.max;
+  const otherFull = _voiceLimits.other.used >= _voiceLimits.other.max;
+  const allFull = selfFull && otherFull;
+  document.getElementById('voice-create-card').style.display = allFull ? 'none' : 'block';
+  if (!allFull) {
     document.querySelectorAll('.vk-btn').forEach(b => {
-      const has = kinds.includes(b.dataset.kind);
-      b.disabled = has;
-      b.style.opacity = has ? '.4' : '';
+      const full = b.dataset.kind === 'self' ? selfFull : otherFull;
+      b.disabled = full;
+      b.style.opacity = full ? '.4' : '';
     });
-    if (kinds.includes(_voiceKind)) selectVoiceKind(kinds.includes('self') ? 'other' : 'self');
+    // 当前选中类型已满 → 自动切到未满的类型
+    const curFull = _voiceKind === 'self' ? selfFull : otherFull;
+    if (curFull) selectVoiceKind(selfFull ? 'other' : 'self');
+    else selectVoiceKind(_voiceKind);   // 刷新费用提示
+  }
+}
+
+// 根据当前选中类型的已用份数，提示这一份是否收费
+function _updateVoiceCostTag() {
+  const tag = document.getElementById('voice-cost-tag');
+  if (!tag || !_voiceLimits) return;
+  const lim = _voiceLimits[_voiceKind] || { used: 0, free_quota: 1 };
+  const willCharge = lim.used >= lim.free_quota;   // 超出免费额度这一份要收费
+  if (!willCharge) {
+    tag.innerHTML = '<span style="color:#16a34a">本份免费</span>';
+  } else if (_voiceFree) {
+    tag.innerHTML = `<span style="color:#16a34a">限时免费</span> <span style="color:var(--text-3);text-decoration:line-through">${_voiceCost}币</span>`;
+  } else {
+    tag.innerHTML = `<span style="color:#d97706">本份 ${_voiceCost} 言己币</span>`;
   }
 }
 
@@ -3824,6 +3885,7 @@ function selectVoiceKind(kind) {
   });
   const nameEl = document.getElementById('voice-name');
   if (nameEl && !nameEl.value) nameEl.value = kind === 'self' ? '我的声音' : '';
+  _updateVoiceCostTag();
 }
 
 // ── 录音 ──
@@ -4015,23 +4077,36 @@ let _avatarHasVoice = false;
 
 async function checkAvatarVoice() {
   if (!currentAvatar?.id) return;
-  // 统一走替身详情的 has_voice（账号级复刻声就绪且已绑定才为 true）
-  // 接收者也适用，无需调用创建者专属接口
-  if (typeof currentAvatar.has_voice === 'boolean') {
-    _avatarHasVoice = currentAvatar.has_voice;
-    return;
-  }
+  // 每次进入对话都向服务端确认（不缓存）：
+  // 创建者随时可能开启/更换/关闭声音，接收者必须能立即看到变化，
+  // 不能因为本地缓存了 has_voice 就一直沿用旧值（曾导致「要解绑重绑才生效」的错觉）
+  const avatarId = currentAvatar.id;
   try {
-    const res = await api('GET', '/api/avatars/' + currentAvatar.id);
+    const res = await api('GET', '/api/avatars/' + avatarId);
+    if (!currentAvatar || currentAvatar.id !== avatarId) return;  // 期间已切换替身
     _avatarHasVoice = !!res?.has_voice;
-    if (res) currentAvatar.has_voice = !!res.has_voice;
+    currentAvatar.has_voice = _avatarHasVoice;
   } catch (e) {
     _avatarHasVoice = false;
   }
+  // 容器 class 统一控制所有消息（含历史）的小喇叭显隐，无需重渲染
+  document.getElementById('chat-messages')?.classList.toggle('has-voice', _avatarHasVoice);
 }
 
-async function _loadTTS(idx, text) {
+// ─── 消息语音播放（微信式进度条：保留文字 + 可暂停续播）───
+// 会话内内存缓存：同一条消息重复播放不再调 TTS（省费用省延迟）
+const _ttsAudios = {};   // idx -> Audio
+
+function _fmtSec(s) {
+  s = Math.max(0, Math.round(s || 0));
+  return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+}
+
+async function startMsgVoice(idx, text) {
   if (!currentAvatar?.id) return;
+  // 已合成过 → 直接切换播放/暂停
+  if (_ttsAudios[idx]) { toggleTTSPlay(idx); return; }
+
   const toggle = document.querySelector(`.msg-voice-toggle[data-idx="${idx}"]`);
   if (toggle) toggle.textContent = '⏳ 合成中…';
   try {
@@ -4040,61 +4115,56 @@ async function _loadTTS(idx, text) {
       headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
       body: JSON.stringify({ text }),
     });
-    if (!resp.ok) {
-      if (toggle) toggle.textContent = '🔊 点击播放语音';
-      _msgVoiceMode[idx] = 'text';
-      return;
-    }
-    const blob = await resp.blob();
-    const url = URL.createObjectURL(blob);
-    const audio = document.getElementById('audio-' + idx);
-    const wrap  = document.getElementById('audio-wrap-' + idx);
-    const bubble = document.getElementById('bubble-' + idx);
-    if (audio && wrap) {
-      audio.src = url;
-      audio.load();
-      wrap.style.display = 'block';
-      if (bubble) bubble.style.display = 'none';
-      audio.play().catch(() => {});
-      if (toggle) toggle.textContent = '💬 点击显示文字';
-    }
+    if (!resp.ok) throw new Error((await resp.json()).error || '合成失败');
+    const url = URL.createObjectURL(await resp.blob());
+    const audio = new Audio(url);
+    _ttsAudios[idx] = audio;
+
+    const btn  = document.getElementById('vpl-btn-' + idx);
+    const fill = document.getElementById('vpl-fill-' + idx);
+    const time = document.getElementById('vpl-time-' + idx);
+    audio.addEventListener('loadedmetadata', () => { if (time) time.textContent = _fmtSec(audio.duration); });
+    audio.addEventListener('timeupdate', () => {
+      if (fill && audio.duration) fill.style.width = (audio.currentTime / audio.duration * 100) + '%';
+      if (time) time.textContent = _fmtSec(audio.currentTime) + '/' + _fmtSec(audio.duration);
+    });
+    audio.addEventListener('play',  () => { if (btn) btn.textContent = '⏸'; });
+    audio.addEventListener('pause', () => { if (btn) btn.textContent = '▶'; });
+    audio.addEventListener('ended', () => {
+      if (btn) btn.textContent = '▶';
+      if (fill) fill.style.width = '0';
+      if (time) time.textContent = _fmtSec(audio.duration);
+      audio.currentTime = 0;
+    });
+
+    const player = document.getElementById('vplayer-' + idx);
+    if (player) player.style.display = 'flex';
+    if (toggle) toggle.style.display = 'none';   // 播放条出现后隐藏喇叭入口
+    audio.play().catch(() => {});
   } catch (e) {
-    // 失败回退到文字模式
-    if (toggle) toggle.textContent = '🔊 点击播放语音';
-    _msgVoiceMode[idx] = 'text';
-    const bubble = document.getElementById('bubble-' + idx);
-    if (bubble) bubble.style.display = '';
-    const wrap = document.getElementById('audio-wrap-' + idx);
-    if (wrap) wrap.style.display = 'none';
+    if (toggle) toggle.textContent = '🔊 播放语音';
+    toast('语音合成失败：' + e.message, 'error');
   }
 }
 
-function toggleMsgVoice(idx, text) {
-  const mode = _msgVoiceMode[idx] || 'text';
-  const bubble = document.getElementById('bubble-' + idx);
-  const wrap   = document.getElementById('audio-wrap-' + idx);
-  const toggle = document.querySelector(`.msg-voice-toggle[data-idx="${idx}"]`);
-  const audio  = document.getElementById('audio-' + idx);
-
-  if (mode === 'voice') {
-    // 切换到文字
-    _msgVoiceMode[idx] = 'text';
-    if (bubble) bubble.style.display = '';
-    if (wrap) wrap.style.display = 'none';
-    if (audio) audio.pause();
-    if (toggle) toggle.textContent = '🔊 点击播放语音';
+function toggleTTSPlay(idx) {
+  const audio = _ttsAudios[idx];
+  if (!audio) return;
+  if (audio.paused) {
+    // 同时只播一条：暂停其他
+    Object.entries(_ttsAudios).forEach(([k, a]) => { if (k != idx && !a.paused) a.pause(); });
+    audio.play().catch(() => {});
   } else {
-    // 切换到语音
-    _msgVoiceMode[idx] = 'voice';
-    if (bubble) bubble.style.display = 'none';
-    if (wrap && audio?.src) {
-      wrap.style.display = 'block';
-      audio.play().catch(() => {});
-    } else {
-      _loadTTS(idx, text);
-    }
-    if (toggle) toggle.textContent = '💬 点击显示文字';
+    audio.pause();
   }
+}
+
+function seekTTS(e, idx) {
+  const audio = _ttsAudios[idx];
+  if (!audio || !audio.duration) return;
+  const track = e.currentTarget;
+  const ratio = (e.clientX - track.getBoundingClientRect().left) / track.offsetWidth;
+  audio.currentTime = Math.max(0, Math.min(1, ratio)) * audio.duration;
 }
 
 // ─── 声音克隆管理 ───────────────────────────────────────────

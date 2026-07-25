@@ -108,9 +108,14 @@ class Config:
     PUBLIC_BASE_URL: str     = os.getenv("PUBLIC_BASE_URL", "")
 
     # 声音复刻计费
-    VOICE_CLONE_COST: int   = int(os.getenv("VOICE_CLONE_COST", 1000))   # 言己币
-    VOICE_CLONE_FREE: bool  = os.getenv("VOICE_CLONE_FREE", "1") != "0"  # 限时免费开关
-    VOICE_MAX_PER_USER: int = 2   # self 1 + other 1
+    VOICE_CLONE_COST: int   = int(os.getenv("VOICE_CLONE_COST", 1000))   # 言己币/份
+    VOICE_CLONE_FREE: bool  = os.getenv("VOICE_CLONE_FREE", "1") != "0"  # 限时免费开关（开时全免）
+    # 每类型上限与免费额度：self 可 2 份（第 2 份计费），other 1 份
+    VOICE_MAX_SELF: int     = int(os.getenv("VOICE_MAX_SELF", 2))
+    VOICE_MAX_OTHER: int    = int(os.getenv("VOICE_MAX_OTHER", 1))
+    VOICE_FREE_SELF: int    = int(os.getenv("VOICE_FREE_SELF", 1))   # 前 N 份自己声音免费
+    VOICE_FREE_OTHER: int   = int(os.getenv("VOICE_FREE_OTHER", 1))
+    VOICE_MAX_PER_USER: int = VOICE_MAX_SELF + VOICE_MAX_OTHER       # 兼容旧引用
 
     # 图片缓存（仅缩略图，超上限时按relevance_score淘汰）
     IMAGE_THUMB_MAX_WIDTH: int = int(os.getenv("IMAGE_THUMB_MAX_WIDTH", 300))

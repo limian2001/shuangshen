@@ -45,7 +45,7 @@
       <text class="feature-icon">🎙️</text>
       <view>
         <view class="feature-title">声音复刻</view>
-        <view class="feature-desc">上传音频，AI 还原ta独有的音色</view>
+        <view class="feature-desc">上传音频，AI 还原ta独有的音色，支持方言</view>
       </view>
     </view>
     <view class="feature-card">

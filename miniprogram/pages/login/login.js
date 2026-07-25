@@ -25,6 +25,17 @@ Page({
       this._goHome();
       return;
     }
+    // 用户此前主动"退出登录" → 不自动静默登录，要求显式点击（尊重退出意图）
+    if (wx.getStorageSync('yj_logged_out')) {
+      this.setData({ loading: false, step: 'manual_login' });
+      return;
+    }
+    this._doSilentLogin();
+  },
+
+  // 显式点击"微信登录" → 清除退出标记后走静默登录
+  onTapLogin() {
+    wx.removeStorageSync('yj_logged_out');
     this._doSilentLogin();
   },
 
@@ -158,6 +169,7 @@ Page({
   _saveAndGo(data) {
     const { token, user_id, display_name } = data;
     app.saveAuth(token, { user_id, display_name });
+    wx.removeStorageSync('yj_logged_out');   // 登录成功，清除退出标记
     this._goHome();
   },
 
