@@ -12,14 +12,12 @@
 
   <!-- Hero 区域 -->
   <view class="hero">
-    <view class="hero-logo">言己</view>
     <view class="hero-title">用 AI 重现你珍视的人</view>
     <view class="hero-sub">音色 · 记忆 · 说话方式，一一还原</view>
   </view>
 
   <!-- 示例对话：让用户感受产品 -->
   <view class="demo-section">
-    <view class="demo-label">✦ 就像这样对话（以下内容由 AI 生成）</view>
     <view class="demo-chat">
       <view class="bubble-wrap right">
         <view class="bubble bubble-user">妈，我今天工作不顺利，好累……</view>
@@ -55,18 +53,11 @@
         <view class="feature-desc">导入聊天记录，学习ta的说话方式</view>
       </view>
     </view>
-    <view class="feature-card">
-      <text class="feature-icon">📸</text>
-      <view>
-        <view class="feature-title">照片故事</view>
-        <view class="feature-desc">用照片和文字丰富 AI 的长期记忆</view>
-      </view>
-    </view>
   </view>
 
   <!-- 登录按钮 -->
   <view class="cta-section">
-    <button class="cta-btn" bindtap="goLogin">免费创建 AI 替身</button>
+    <button class="cta-btn" bindtap="goLogin">立即登录，创建替身</button>
     <button class="cta-btn-ghost" bindtap="goGuest">游客进入，先逛逛</button>
     <view class="cta-hint">一分钟上手 · 随时随地对话</view>
   </view>
