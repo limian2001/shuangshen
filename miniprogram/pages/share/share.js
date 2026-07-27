@@ -13,22 +13,24 @@ Page({
     this.setData({ userId: user.user_id || '' });
   },
 
-  // 转发给朋友
+  // 转发给朋友（好友点开落到本页 —— 对新用户友好的着陆页）
   onShareAppMessage() {
     const user = app.globalData.userInfo || {};
     const userId = user.user_id || '';
     return {
-      title: '用 AI 重现你珍视的人，随时对话',
-      path: userId ? `/pages/login/login?ref=${userId}` : '/pages/login/login',
+      title: '把说不出口的事写下来，它会认真给你回信',
+      path: userId ? `/pages/share/share?ref=${userId}` : '/pages/share/share',
     };
   },
 
-  // 分享到朋友圈（需要在 app.json 开启 "permission" 或在 page.json 配置）
+  // 分享到朋友圈
+  // ⚠️ 朋友圈分享只能落在「当前页面」，且含 web-view 的页面不支持分享朋友圈，
+  //    所以必须由本页（纯原生）承担，页面内容也要写给新用户看
   onShareTimeline() {
     const user = app.globalData.userInfo || {};
     const userId = user.user_id || '';
     return {
-      title: '言己 — 让 AI 替身陪你说说话',
+      title: '解忧杂货铺：把说不出口的事写下来，它会认真给你回信',
       query: userId ? `ref=${userId}` : '',
     };
   },

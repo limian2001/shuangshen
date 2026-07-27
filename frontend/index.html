@@ -2,8 +2,8 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="ss-build" content="20260718-15">
-<script>const SS_BUILD = '20260718-15'; console.log('ss-build: ' + SS_BUILD);</script>
+<meta name="ss-build" content="20260728-1">
+<script>const SS_BUILD = '20260728-1'; console.log('ss-build: ' + SS_BUILD);</script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>替身 · Shuangshen</title>
 <style>
@@ -591,6 +591,10 @@ body.is-mobile .row .field   { width: 100%; }
       <div class="nav-item" onclick="showPage('myvoices')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>
         我的声音
+      </div>
+      <div class="nav-item" onclick="goShare()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+        分享给朋友
       </div>
       <div class="nav-item" onclick="showPage('topics')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
@@ -3501,6 +3505,16 @@ function _copyText(text, msg) {
 }
 
 // 分享小程序得10币（每日3次）
+// 跳转到小程序原生分享页
+// ⚠️ 含 web-view 的页面无法分享到朋友圈（微信限制），必须由原生 share 页承担
+function goShare() {
+  if (window.__wxjs_environment === 'miniprogram' && window.wx && wx.miniProgram) {
+    wx.miniProgram.navigateTo({ url: '/pages/share/share' });
+  } else {
+    toast('请在微信小程序中使用分享功能', 'info');
+  }
+}
+
 async function doShareRecord(btn) {
   if (!token) return toast('请先登录', 'error');
   // 仅在微信小程序内有效

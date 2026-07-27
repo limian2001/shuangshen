@@ -1,19 +1,31 @@
-<view class="container">
-  <view class="icon">🔗</view>
-  <view class="title">分享言己小程序</view>
-  <view class="desc">
-    分享给好友，好友注册即送 <text class="highlight">30 言己币</text>，你同时获得 <text class="highlight">20 言己币</text>！
+<!-- 分享页 —— 同时是朋友圈分享的着陆页，内容需对新用户友好 -->
+<scroll-view scroll-y class="container">
+
+  <view class="hero">
+    <view class="icon">🏮</view>
+    <view class="title">解忧杂货铺</view>
+    <view class="desc">
+      把说不出口的事写下来<br>它会认真读完，再给你回信
+    </view>
   </view>
 
-  <!-- 转发给朋友 -->
-  <button class="share-btn primary" open-type="share">
-    📤 转发给朋友
-  </button>
+  <view class="sample">
+    <view class="sample-q">爸妈老了，可我越来越不想接他们的电话，我是不是很不孝？</view>
+    <view class="sample-a">真正不孝的人，是不会为这件事写信来问的。会煎熬，恰恰说明你在乎……</view>
+  </view>
 
-  <!-- 朋友圈分享提示 -->
+  <button class="share-btn primary" open-type="share">分享给朋友</button>
+
   <view class="circle-hint">
-    朋友圈分享：点右上角 ··· → 分享到朋友圈
+    分享到朋友圈：点右上角 ··· → 分享到朋友圈
   </view>
 
-  <button class="share-btn secondary" bindtap="goBack">← 返回</button>
-</view>
+  <view class="reward" wx:if="{{userId}}">
+    好友通过你的分享注册可得 <text class="highlight">30 言己币</text>，你同时获得 <text class="highlight">20 言己币</text>
+  </view>
+
+  <view class="ai-notice">本产品中替身的形象与全部对话内容均由人工智能（AI）生成</view>
+
+  <button class="share-btn secondary" bindtap="goBack">返回</button>
+
+</scroll-view>
