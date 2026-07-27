@@ -46,6 +46,9 @@ class Config:
     EMBED_API_KEY: str  = os.getenv("EMBED_API_KEY", "")
     EMBED_MODEL: str    = os.getenv("EMBED_MODEL", "hunyuan-embedding")
 
+    # 官方替身（平台自营，所有登录用户可直接对话）
+    OFFICIAL_DAILY_LIMIT: int = int(os.getenv("OFFICIAL_DAILY_LIMIT", 20))  # 每人每日条数
+
     # 对话链路 Trace（全链路可见性）
     TRACE_ENABLED: bool       = os.getenv("TRACE_ENABLED", "1") != "0"
     TRACE_RETENTION_DAYS: int = int(os.getenv("TRACE_RETENTION_DAYS", 14))

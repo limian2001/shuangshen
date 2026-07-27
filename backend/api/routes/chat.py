@@ -131,7 +131,15 @@ def get_voice_audio(avatar_id, msg_id):
 
 def _process_chat(avatar_id, message, want_voice,
                   user_msg_id=None, msg_type="text", audio_path=None, duration=0):
-    """统一对话管线：接管检查 → 上下文 → LLM → 存储 → 响应"""
+    """统一对话管线：限额检查 → 接管检查 → 上下文 → LLM → 存储 → 响应"""
+    # 官方替身每日限额（防公开入口被刷爆）
+    allowed, used, limit = _check_official_quota(avatar_id, g.user_id)
+    if not allowed:
+        return jsonify({
+            "error": f"今日对话次数已用完（{used}/{limit} 条），明天再来聊吧",
+            "quota_exceeded": True, "used": used, "limit": limit,
+        }), 429
+
     # ── 检查人工接管 ──────────────────────────────────────────────────────────
     with get_db() as _tc:
         active_takeover = _tc.execute(
@@ -217,6 +225,9 @@ def _process_chat(avatar_id, message, want_voice,
     from backend.services.trace import save_trace
     save_trace(saved_user_msg_id, avatar_id, g.user_id)
 
+    # ⑤c 官方替身：回复成功才计入每日限额（LLM 失败不扣额度）
+    _consume_official_quota(avatar_id, g.user_id)
+
     # ⑥ 构建响应
     response: dict = {
         "reply":                  reply,
@@ -225,6 +236,9 @@ def _process_chat(avatar_id, message, want_voice,
     if msg_type == "voice":
         response["user_msg_id"] = user_msg_id
         response["recognized_text"] = message
+    # 官方替身：回传剩余额度，前端可提示"今日还剩 N 条"
+    if limit:
+        response["quota"] = {"used": used + 1, "limit": limit}
 
     # ⑦ 可选：同步合成 TTS，返回 base64 MP3（失败不影响文字回复）
     if want_voice:
@@ -274,11 +288,14 @@ def get_history(avatar_id):
 def _receiver_can_chat(avatar_id: str, user_id: str) -> bool:
     with get_db() as conn:
         avatar = row_to_dict(conn.execute(
-            "SELECT creator_id FROM avatars WHERE id = ? AND status = 'active'",
+            "SELECT creator_id, is_official FROM avatars WHERE id = ? AND status = 'active'",
             (avatar_id,),
         ).fetchone())
         if not avatar:
             return False
+        # 官方替身：所有登录用户可直接对话，无需绑定（有每日限额，见 _check_official_quota）
+        if avatar.get("is_official"):
+            return True
         if avatar["creator_id"] == user_id:
             return True
         row = conn.execute(
@@ -286,6 +303,44 @@ def _receiver_can_chat(avatar_id: str, user_id: str) -> bool:
             (avatar_id, user_id),
         ).fetchone()
     return row is not None
+
+
+def _check_official_quota(avatar_id: str, user_id: str) -> tuple[bool, int, int]:
+    """
+    官方替身每日限额检查（不递增）。
+    Returns (allowed, used, limit)；非官方替身直接放行。
+    """
+    with get_db() as conn:
+        av = row_to_dict(conn.execute(
+            "SELECT is_official, creator_id FROM avatars WHERE id=?", (avatar_id,)).fetchone())
+        if not av or not av.get("is_official"):
+            return True, 0, 0
+        # 创建者（admin）自己调试不受限
+        if av.get("creator_id") == user_id:
+            return True, 0, 0
+        limit = config.OFFICIAL_DAILY_LIMIT
+        row = conn.execute(
+            "SELECT count FROM official_chat_quota WHERE user_id=? AND avatar_id=? AND date=date('now')",
+            (user_id, avatar_id)).fetchone()
+        used = row[0] if row else 0
+    return used < limit, used, limit
+
+
+def _consume_official_quota(avatar_id: str, user_id: str):
+    """回复成功后才计数（失败不扣额度）"""
+    try:
+        with get_db() as conn:
+            av = conn.execute(
+                "SELECT is_official, creator_id FROM avatars WHERE id=?", (avatar_id,)).fetchone()
+            if not av or not av["is_official"] or av["creator_id"] == user_id:
+                return
+            conn.execute(
+                """INSERT INTO official_chat_quota (user_id, avatar_id, date, count)
+                   VALUES (?, ?, date('now'), 1)
+                   ON CONFLICT(user_id, avatar_id, date) DO UPDATE SET count = count + 1""",
+                (user_id, avatar_id))
+    except Exception:
+        pass
 
 
 def _save_message(avatar_id: str, receiver_id: str, role: str, content: str,

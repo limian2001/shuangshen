@@ -201,6 +201,7 @@ def list_avatars():
         total = conn.execute("SELECT COUNT(*) FROM avatars WHERE status!='deleted'").fetchone()[0]
         avatars = rows_to_list(conn.execute(
             """SELECT a.id, a.name, a.relationship, a.status, a.created_at,
+                      a.is_official, a.official_desc, a.official_emoji,
                       u.display_name AS creator_name, u.phone AS creator_phone,
                       (SELECT COUNT(*) FROM memories m WHERE m.avatar_id=a.id) AS memory_count,
                       (SELECT COUNT(*) FROM chat_messages c WHERE c.avatar_id=a.id) AS msg_count,
@@ -592,3 +593,50 @@ def update_settings():
     set_setting(key, value)
     print(f"[ADMIN] 设置已更新: {key} = {value}")
     return jsonify({"ok": True, "key": key, "value": value})
+
+
+# ─────────────────────────────────────────────
+# 官方替身（平台自营，所有登录用户可直接对话）
+# ─────────────────────────────────────────────
+
+@admin_bp.post("/avatars/<avatar_id>/official")
+@require_admin
+def set_official(avatar_id):
+    """
+    标记/取消官方替身，并设置入口卡片展示信息。
+    Body: {"is_official": true, "desc": "副标题", "emoji": "🏮"}
+    """
+    data = request.get_json() or {}
+    is_official = 1 if data.get("is_official") else 0
+    desc  = (data.get("desc") or "").strip()[:40]
+    emoji = (data.get("emoji") or "").strip()[:4]
+
+    with get_db() as conn:
+        av = conn.execute("SELECT id FROM avatars WHERE id=?", (avatar_id,)).fetchone()
+        if not av:
+            return jsonify({"error": "替身不存在"}), 404
+        conn.execute(
+            "UPDATE avatars SET is_official=?, official_desc=?, official_emoji=? WHERE id=?",
+            (is_official, desc, emoji, avatar_id))
+    print(f"[ADMIN] 替身 {avatar_id[:8]} is_official={is_official}")
+    return jsonify({"ok": True, "is_official": bool(is_official)})
+
+
+@admin_bp.get("/official-stats")
+@require_admin
+def official_stats():
+    """官方替身使用概况：今日/累计对话量、独立用户数"""
+    with get_db() as conn:
+        rows = rows_to_list(conn.execute(
+            """SELECT a.id, a.name, a.official_desc, a.official_emoji,
+                      (SELECT COUNT(*) FROM chat_messages c
+                        WHERE c.avatar_id=a.id AND c.role='user') AS total_msgs,
+                      (SELECT COUNT(*) FROM chat_messages c
+                        WHERE c.avatar_id=a.id AND c.role='user'
+                          AND c.created_at >= date('now')) AS today_msgs,
+                      (SELECT COUNT(DISTINCT receiver_id) FROM chat_messages c
+                        WHERE c.avatar_id=a.id) AS uniq_users,
+                      (SELECT COUNT(*) FROM memories m WHERE m.avatar_id=a.id) AS mem_count
+               FROM avatars a
+               WHERE a.is_official=1 AND a.status='active'""").fetchall())
+    return jsonify({"avatars": rows})

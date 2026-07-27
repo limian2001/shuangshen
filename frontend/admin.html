@@ -688,6 +688,25 @@ function showPage(p) {
 }
 
 // ─────────────────────────────────────────────
+// 官方替身：标记 / 取消（所有登录用户可直接对话，有每日限额）
+// ─────────────────────────────────────────────
+async function toggleOfficial(avatarId, isOfficial, name) {
+  if (isOfficial) {
+    if (!confirm(`确认取消「${name}」的官方身份？\n取消后用户首页将不再显示该入口。`)) return;
+    const d = await api('POST', `/api/admin/avatars/${avatarId}/official`, { is_official: false });
+    if (d?.ok) { toast('已取消官方身份'); loadAvatarList(); }
+    return;
+  }
+  const desc = prompt(`设为官方替身：「${name}」\n\n请输入入口副标题（用户首页显示）：`, '以《解忧杂货铺》的方式，回答你的人生困惑');
+  if (desc === null) return;
+  const emoji = prompt('请输入入口图标（emoji）：', '🏮');
+  if (emoji === null) return;
+  const d = await api('POST', `/api/admin/avatars/${avatarId}/official`,
+                      { is_official: true, desc, emoji });
+  if (d?.ok) { toast('已设为官方替身，用户登录后即可在首页看到入口'); loadAvatarList(); }
+}
+
+// ─────────────────────────────────────────────
 // 运行时设置（声音复刻通道等，改后立即生效）
 // ─────────────────────────────────────────────
 async function loadSettings() {
@@ -1045,11 +1064,11 @@ async function loadAvatarList() {
     if (!d) return;
     document.getElementById('avatar-total-badge').textContent = `共 ${d.total} 个替身`;
 
-    const REL_LABELS = {son:'儿子',daughter:'女儿',father:'父亲',mother:'母亲',boyfriend:'男友',girlfriend:'女友',elder_brother:'哥哥',younger_brother:'弟弟',elder_sister:'姐姐',younger_sister:'妹妹',friend:'朋友',bestie:'闺蜜',custom:'自定义'};
+    const REL_LABELS = {son:'儿子',daughter:'女儿',father:'父亲',mother:'母亲',boyfriend:'男友',girlfriend:'女友',elder_brother:'哥哥',younger_brother:'弟弟',elder_sister:'姐姐',younger_sister:'妹妹',friend:'朋友',bestie:'闺蜜',husband:'丈夫',wife:'妻子',colleague:'同事',custom:'自定义'};
 
     document.getElementById('avatar-tbody').innerHTML = d.avatars.map(a => `
       <tr class="clickable" onclick="openAvatarModal('${a.id}')">
-        <td><b>${esc(a.name)}</b></td>
+        <td><b>${esc(a.name)}</b>${a.is_official ? ' <span class="badge" style="background:#534AB7;color:#fff;font-size:10px">官方</span>' : ''}</td>
         <td>${REL_LABELS[a.relationship]||a.relationship}</td>
         <td>${esc(a.creator_name||'—')} <span style="color:var(--text-3);font-size:11px">${a.creator_phone||''}</span></td>
         <td>${a.memory_count}</td>
@@ -1059,6 +1078,8 @@ async function loadAvatarList() {
         <td style="color:var(--text-3)">${fmtDate(a.created_at)}</td>
         <td onclick="event.stopPropagation()">
           <button class="btn btn-sm" onclick="openAvatarModal('${a.id}')">详情</button>
+          <button class="btn btn-sm" onclick="toggleOfficial('${a.id}', ${a.is_official ? 'true' : 'false'}, '${esc(a.name)}')"
+                  style="${a.is_official ? 'background:#534AB7;color:#fff' : ''}">${a.is_official ? '取消官方' : '设为官方'}</button>
         </td>
       </tr>`).join('') || '<tr><td colspan="9" class="empty-state">无数据</td></tr>';
 
@@ -1097,7 +1118,7 @@ async function openUserModal(userId) {
       </div>`;
 
     // Avatars tab
-    const REL_LABELS = {son:'儿子',daughter:'女儿',father:'父亲',mother:'母亲',boyfriend:'男友',girlfriend:'女友',elder_brother:'哥哥',younger_brother:'弟弟',elder_sister:'姐姐',younger_sister:'妹妹',friend:'朋友',bestie:'闺蜜',custom:'自定义'};
+    const REL_LABELS = {son:'儿子',daughter:'女儿',father:'父亲',mother:'母亲',boyfriend:'男友',girlfriend:'女友',elder_brother:'哥哥',younger_brother:'弟弟',elder_sister:'姐姐',younger_sister:'妹妹',friend:'朋友',bestie:'闺蜜',husband:'丈夫',wife:'妻子',colleague:'同事',custom:'自定义'};
     document.getElementById('user-tab-avatars').innerHTML = d.avatars.length
       ? d.avatars.map(a => `
         <div class="upload-card" style="margin-bottom:10px;cursor:pointer" onclick="closeModal('user-modal');openAvatarModal('${a.id}')">
@@ -1173,7 +1194,7 @@ async function openAvatarModal(avatarId) {
     const a = d.avatar;
     document.getElementById('avatar-modal-title').textContent = `${a.name} · 替身详情`;
 
-    const REL_LABELS = {son:'儿子',daughter:'女儿',father:'父亲',mother:'母亲',boyfriend:'男友',girlfriend:'女友',elder_brother:'哥哥',younger_brother:'弟弟',elder_sister:'姐姐',younger_sister:'妹妹',friend:'朋友',bestie:'闺蜜',custom:'自定义'};
+    const REL_LABELS = {son:'儿子',daughter:'女儿',father:'父亲',mother:'母亲',boyfriend:'男友',girlfriend:'女友',elder_brother:'哥哥',younger_brother:'弟弟',elder_sister:'姐姐',younger_sister:'妹妹',friend:'朋友',bestie:'闺蜜',husband:'丈夫',wife:'妻子',colleague:'同事',custom:'自定义'};
 
     // Info tab
     document.getElementById('avatar-tab-info').innerHTML = `

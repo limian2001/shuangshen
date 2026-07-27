@@ -2,8 +2,8 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="ss-build" content="20260718-9">
-<script>const SS_BUILD = '20260718-9'; console.log('ss-build: ' + SS_BUILD);</script>
+<meta name="ss-build" content="20260718-10">
+<script>const SS_BUILD = '20260718-10'; console.log('ss-build: ' + SS_BUILD);</script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>替身 · Shuangshen</title>
 <style>
@@ -675,6 +675,9 @@ body.is-mobile .row .field   { width: 100%; }
       <div style="background:rgba(83,74,183,.08);border:1px solid rgba(83,74,183,.18);border-radius:10px;padding:10px 14px;margin-bottom:16px;font-size:13px;color:var(--purple,#534AB7);font-weight:600;display:flex;align-items:center;gap:8px">
         <span style="font-size:16px">🤖</span> 替身是由人工智能（AI）技术生成的虚拟形象，其全部对话内容均为 AI 生成
       </div>
+
+      <!-- 官方替身入口（平台自营，登录即可直接对话） -->
+      <div id="official-avatars" style="margin-bottom:20px"></div>
       <button class="btn btn-primary" onclick="showCreateAvatar()" style="margin-bottom:20px">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         创建新替身
@@ -1720,6 +1723,7 @@ function showPage(page) {
   if (page === 'avatars') {
     navItems[0]?.classList.add('active');
     document.getElementById('avatar-sidebar-section').style.display = 'none';
+    loadOfficialAvatars();
     loadBoundAvatarsSection();
   } else if (page === 'received') {
     navItems[1]?.classList.add('active');
@@ -1805,10 +1809,13 @@ function setCurrentAvatar(avatar) {
     const el = document.getElementById(id);
     if (el) el.style.setProperty('display', isReceived ? 'none' : '', 'important');
   });
+  // 官方替身：同样隐藏管理 Tab，但不能解绑（用户并未绑定它）
+  const isOfficial = !!(avatar._isOfficial || avatar.is_official);
+  const showUnbind = isReceived && !isOfficial;
   const ubD = document.getElementById('snav-unbind');
-  if (ubD) ubD.style.setProperty('display', isReceived ? 'flex' : 'none', 'important');
+  if (ubD) ubD.style.setProperty('display', showUnbind ? 'flex' : 'none', 'important');
   const ubM = document.getElementById('msnav-unbind');
-  if (ubM) ubM.style.setProperty('display', isReceived ? 'block' : 'none', 'important');
+  if (ubM) ubM.style.setProperty('display', showUnbind ? 'block' : 'none', 'important');
 }
 
 // 管理替身（人设/记忆/喂数据/共享），默认进喂数据页
@@ -1876,6 +1883,38 @@ function copyModalShareCode() {
 
 // 兼容旧调用（绑定替身列表中点击 → 进对话）
 function selectAvatar(avatar) { openAvatarChat(avatar); }
+
+// ─── 官方替身（平台自营，登录即可对话，无需绑定）───────────────
+async function loadOfficialAvatars() {
+  const el = document.getElementById('official-avatars');
+  if (!el) return;
+  if (!token) { el.innerHTML = ''; return; }   // 游客不展示（避免点了才发现要登录）
+  const list = await api('GET', '/api/avatars/official');
+  if (!list || !list.length) { el.innerHTML = ''; return; }
+
+  el.innerHTML = list.map(a => {
+    const left = Math.max(0, (a.daily_limit || 0) - (a.daily_used || 0));
+    const aj = JSON.stringify({ ...a, _isOfficial: true }).replace(/"/g, '&quot;');
+    return `
+    <div class="card" style="cursor:pointer;background:linear-gradient(135deg,#f6f4ff,#fff);border-color:var(--purple-mid)"
+         onclick="openAvatarChat(${aj})">
+      <div style="display:flex;align-items:center;gap:14px">
+        <div style="font-size:34px;line-height:1">${a.official_emoji || '✨'}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:700;font-size:15px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+            ${esc(a.name)}
+            <span style="font-size:10px;font-weight:600;background:var(--purple);color:#fff;padding:1px 7px;border-radius:8px">官方</span>
+          </div>
+          <div style="font-size:12.5px;color:var(--text-3);margin-top:3px;line-height:1.5">${esc(a.official_desc || '')}</div>
+          <div style="font-size:11px;color:var(--text-3);margin-top:4px">
+            今日还可对话 <b style="color:${left > 0 ? 'var(--purple)' : '#dc2626'}">${left}</b> / ${a.daily_limit} 条
+          </div>
+        </div>
+        <div style="color:var(--purple);font-size:20px">›</div>
+      </div>
+    </div>`;
+  }).join('');
+}
 
 // ─── Avatars ─────────────────────────────────
 async function loadAvatars() {
@@ -2138,6 +2177,12 @@ async function sendMessage() {
   const res = await api('POST', '/api/chat/' + avatarId, { message: text });
   hideTyping();
   document.getElementById('send-btn').disabled = false;
+
+  // 官方替身每日限额：用尽时提示，并回显剩余条数
+  if (res && res.quota) {
+    const left = res.quota.limit - res.quota.used;
+    if (left <= 3 && left > 0) toast(`今日还可对话 ${left} 条`, 'info');
+  }
 
   if (res && res.takeover) {
     // 人工接管中：无感知，不显示任何提示，静默等待人工回复

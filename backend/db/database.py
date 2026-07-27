@@ -345,6 +345,18 @@ def _run_migrations(conn: sqlite3.Connection):
         "ALTER TABLE user_voices ADD COLUMN model TEXT DEFAULT ''",
         # 替身绑定的账号级声音（NULL/空 = 关闭，不显示小喇叭）
         "ALTER TABLE avatars ADD COLUMN user_voice_id TEXT DEFAULT NULL",
+        # v1.7: 官方替身（平台自营，所有登录用户可直接对话，无需绑定）
+        "ALTER TABLE avatars ADD COLUMN is_official INTEGER DEFAULT 0",
+        "ALTER TABLE avatars ADD COLUMN official_desc TEXT DEFAULT ''",   # 入口卡片副标题
+        "ALTER TABLE avatars ADD COLUMN official_emoji TEXT DEFAULT ''",  # 入口卡片图标
+        # 官方替身每日对话限额（按用户+替身+日期计数，防成本失控）
+        """CREATE TABLE IF NOT EXISTS official_chat_quota (
+            user_id   TEXT NOT NULL,
+            avatar_id TEXT NOT NULL,
+            date      TEXT NOT NULL,       -- YYYY-MM-DD
+            count     INTEGER DEFAULT 0,
+            PRIMARY KEY (user_id, avatar_id, date)
+        )""",
         # v1.6: 运行时设置 KV（admin 可改，立即生效，不用重启/改env）
         """CREATE TABLE IF NOT EXISTS app_settings (
             key        TEXT PRIMARY KEY,

@@ -362,6 +362,32 @@ def join_avatar(share_code):
     }), 201
 
 
+@avatars_bp.get("/official")
+@require_auth
+def official_avatars():
+    """
+    官方替身列表（平台自营，所有登录用户可直接对话，无需绑定）。
+    附带当前用户今日剩余额度。
+    """
+    from backend.core.config import config as _cfg
+    with get_db() as conn:
+        rows = rows_to_list(conn.execute(
+            """SELECT id, name, relationship, official_desc, official_emoji,
+                      identity_desc, creator_id
+               FROM avatars
+               WHERE is_official = 1 AND status = 'active'
+               ORDER BY created_at""").fetchall())
+        for r in rows:
+            used = conn.execute(
+                "SELECT count FROM official_chat_quota WHERE user_id=? AND avatar_id=? AND date=date('now')",
+                (g.user_id, r["id"])).fetchone()
+            r["is_official"] = True
+            r["daily_used"] = (used[0] if used else 0)
+            r["daily_limit"] = _cfg.OFFICIAL_DAILY_LIMIT
+            r.pop("creator_id", None)
+    return jsonify(rows)
+
+
 @avatars_bp.get("/received")
 @require_auth
 def received_avatars():
@@ -391,7 +417,9 @@ def leave_avatar(avatar_id):
 
 
 def _can_access(avatar_id: str, user_id: str, avatar: dict) -> bool:
-    """检查用户是否有权访问某替身（创建者 or 接收者）"""
+    """检查用户是否有权访问某替身（创建者 / 接收者 / 官方替身对所有人开放）"""
+    if avatar.get("is_official"):
+        return True
     if avatar["creator_id"] == user_id:
         return True
     with get_db() as conn:

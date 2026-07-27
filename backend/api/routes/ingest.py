@@ -71,7 +71,11 @@ def paste_text(avatar_id):
     text = (data.get("text") or "").strip()
     if not text:
         return jsonify({"error": "text 不能为空"}), 400
-    if len(text) > 500_000:
+    # 官方替身（平台自营，喂整部作品/长文本）不受单次字数上限约束
+    with get_db() as _c:
+        _av = _c.execute("SELECT is_official FROM avatars WHERE id=?", (avatar_id,)).fetchone()
+    _is_official = bool(_av and _av["is_official"])
+    if not _is_official and len(text) > 500_000:
         return jsonify({"error": "文本过长，请分批导入（单次上限 50 万字）"}), 400
 
     my_names_raw = data.get("my_names", "")
