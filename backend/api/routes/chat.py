@@ -167,14 +167,21 @@ def _process_chat(avatar_id, message, want_voice,
         print(f"[TOPIC_HINT] avatar={avatar_id[:8]} hint_len={len(topic_hints)}")
 
     # ③ 构建对话上下文
+    #    ⚠️ 官方替身与用户替身的 Prompt 构建完全分离（persona_official / persona_builder），
+    #       两边规则互不影响，避免「书信体被短消息规则压制」这类冲突再次发生
     rag_query = message
+    from backend.services.persona_official import is_official_avatar, get_official_context
     try:
-        system_prompt, retrieved_memories = get_chat_context(
-            avatar_id=avatar_id,
-            user_query=rag_query,
-            recent_history=history,
-            topic_hints=topic_hints,
-        )
+        if is_official_avatar(avatar_id):
+            system_prompt, retrieved_memories = get_official_context(
+                avatar_id=avatar_id, user_query=rag_query, topic_hints=topic_hints)
+        else:
+            system_prompt, retrieved_memories = get_chat_context(
+                avatar_id=avatar_id,
+                user_query=rag_query,
+                recent_history=history,
+                topic_hints=topic_hints,
+            )
     except ValueError as e:
         return jsonify({"error": str(e)}), 404
 
@@ -277,7 +284,8 @@ def get_history(avatar_id):
         rows = rows_to_list(conn.execute(
             """SELECT id, role, content, msg_type, duration, created_at FROM chat_messages
                WHERE avatar_id = ? AND receiver_id = ?
-               ORDER BY created_at DESC LIMIT ?""",
+               -- rowid 兜底：created_at 只精确到秒，同秒插入时靠插入顺序保证问答不倒置
+               ORDER BY created_at DESC, rowid DESC LIMIT ?""",
             (avatar_id, g.user_id, limit),
         ).fetchall())
     rows.reverse()
@@ -353,8 +361,8 @@ def _save_message(avatar_id: str, receiver_id: str, role: str, content: str,
     with get_db() as conn:
         conn.execute(
             """INSERT INTO chat_messages (id, avatar_id, receiver_id, role, content,
-                                          msg_type, audio_path, duration)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                                          msg_type, audio_path, duration, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%d %H:%M:%f','now'))""",
             (mid, avatar_id, receiver_id, role, content,
              msg_type, audio_path, duration),
         )
@@ -366,7 +374,7 @@ def _get_recent_history(avatar_id: str, receiver_id: str, limit: int) -> list[di
         rows = rows_to_list(conn.execute(
             """SELECT role, content FROM chat_messages
                WHERE avatar_id = ? AND receiver_id = ?
-               ORDER BY created_at DESC LIMIT ?""",
+               ORDER BY created_at DESC, rowid DESC LIMIT ?""",
             (avatar_id, receiver_id, limit),
         ).fetchall())
     rows.reverse()
