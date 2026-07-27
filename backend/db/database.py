@@ -347,6 +347,8 @@ def _run_migrations(conn: sqlite3.Connection):
         "ALTER TABLE avatars ADD COLUMN user_voice_id TEXT DEFAULT NULL",
         # v1.7: 官方替身（平台自营，所有登录用户可直接对话，无需绑定）
         "ALTER TABLE avatars ADD COLUMN is_official INTEGER DEFAULT 0",
+        # 回复文体：chat=微信短消息（默认，模拟真人）| letter=书信体（详尽分析，300字以上）
+        "ALTER TABLE avatars ADD COLUMN reply_style TEXT DEFAULT 'chat'",
         "ALTER TABLE avatars ADD COLUMN official_desc TEXT DEFAULT ''",   # 入口卡片副标题
         "ALTER TABLE avatars ADD COLUMN official_emoji TEXT DEFAULT ''",  # 入口卡片图标
         # 官方替身每日对话限额（按用户+替身+日期计数，防成本失控）

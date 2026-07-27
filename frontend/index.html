@@ -2,8 +2,8 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="ss-build" content="20260718-10">
-<script>const SS_BUILD = '20260718-10'; console.log('ss-build: ' + SS_BUILD);</script>
+<meta name="ss-build" content="20260718-12">
+<script>const SS_BUILD = '20260718-12'; console.log('ss-build: ' + SS_BUILD);</script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>替身 · Shuangshen</title>
 <style>
@@ -2127,7 +2127,21 @@ function _renderMessages(msgs) {
       }
     });
   } else {
-    box.innerHTML = '<div class="empty" style="margin-top:60px"><p>发送第一条消息，开始对话吧</p></div>';
+    // 官方替身（书信体）给引导语，减少「你好」这类无效开场，直接引出真实困扰
+    const isLetter = currentAvatar?._isOfficial || currentAvatar?.is_official;
+    box.innerHTML = isLetter
+      ? `<div class="empty" style="margin-top:50px;padding:0 24px">
+           <div style="font-size:34px;margin-bottom:12px">🏮</div>
+           <p style="line-height:1.9;color:var(--text-2)">
+             把心里的事写下来吧。<br>
+             不用讲究措辞，把处境、纠结、说不出口的部分写清楚，<br>
+             我会认真读完，再给你回信。
+           </p>
+           <p style="font-size:12px;color:var(--text-3);margin-top:14px">
+             写得越具体，回信越能帮到你
+           </p>
+         </div>`
+      : '<div class="empty" style="margin-top:60px"><p>发送第一条消息，开始对话吧</p></div>';
   }
   scrollBottom();
 }

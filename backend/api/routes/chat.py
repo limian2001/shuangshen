@@ -202,12 +202,15 @@ def _process_chat(avatar_id, message, want_voice,
         f"memories={len(retrieved_memories)} voice={want_voice}"
     )
 
-    # ④ 调用 LLM
+    # ④ 调用 LLM（书信体要写 300~800 字，token 需求约为短消息的 3 倍）
+    with get_db() as _c:
+        _style = _c.execute("SELECT reply_style FROM avatars WHERE id=?", (avatar_id,)).fetchone()
+    _is_letter = bool(_style and _style["reply_style"] == "letter")
     try:
         reply = llm.chat(
             system_prompt=system_prompt,
             messages=messages,
-            max_tokens=2000,
+            max_tokens=4000 if _is_letter else 2000,
             temperature=0.75,
         )
     except RuntimeError as e:

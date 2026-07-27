@@ -16,7 +16,7 @@ FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
 
 # 构建版本号 —— 与 frontend/index.html 的 SS_BUILD 保持一致，
 # 每次改动递增，用于确认线上跑的是不是最新代码（GET / 或 /api/version）
-BUILD = "20260718-10"
+BUILD = "20260718-12"
 
 # 注册所有路由蓝图
 from backend.api.routes.auth import auth_bp

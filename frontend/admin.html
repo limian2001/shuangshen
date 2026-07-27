@@ -701,8 +701,9 @@ async function toggleOfficial(avatarId, isOfficial, name) {
   if (desc === null) return;
   const emoji = prompt('请输入入口图标（emoji）：', '🏮');
   if (emoji === null) return;
+  const letter = confirm('使用「书信体」回复吗？\n\n确定 = 书信体（300~800字，详尽分析，适合解忧杂货铺）\n取消 = 微信短消息（一两句话，模拟真人聊天）');
   const d = await api('POST', `/api/admin/avatars/${avatarId}/official`,
-                      { is_official: true, desc, emoji });
+                      { is_official: true, desc, emoji, reply_style: letter ? 'letter' : 'chat' });
   if (d?.ok) { toast('已设为官方替身，用户登录后即可在首页看到入口'); loadAvatarList(); }
 }
 
@@ -1068,7 +1069,7 @@ async function loadAvatarList() {
 
     document.getElementById('avatar-tbody').innerHTML = d.avatars.map(a => `
       <tr class="clickable" onclick="openAvatarModal('${a.id}')">
-        <td><b>${esc(a.name)}</b>${a.is_official ? ' <span class="badge" style="background:#534AB7;color:#fff;font-size:10px">官方</span>' : ''}</td>
+        <td><b>${esc(a.name)}</b>${a.is_official ? ' <span class="badge" style="background:#534AB7;color:#fff;font-size:10px">官方</span>' : ''}${a.reply_style === 'letter' ? ' <span class="badge" style="background:#b45309;color:#fff;font-size:10px">书信体</span>' : ''}</td>
         <td>${REL_LABELS[a.relationship]||a.relationship}</td>
         <td>${esc(a.creator_name||'—')} <span style="color:var(--text-3);font-size:11px">${a.creator_phone||''}</span></td>
         <td>${a.memory_count}</td>

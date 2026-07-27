@@ -201,7 +201,7 @@ def list_avatars():
         total = conn.execute("SELECT COUNT(*) FROM avatars WHERE status!='deleted'").fetchone()[0]
         avatars = rows_to_list(conn.execute(
             """SELECT a.id, a.name, a.relationship, a.status, a.created_at,
-                      a.is_official, a.official_desc, a.official_emoji,
+                      a.is_official, a.official_desc, a.official_emoji, a.reply_style,
                       u.display_name AS creator_name, u.phone AS creator_phone,
                       (SELECT COUNT(*) FROM memories m WHERE m.avatar_id=a.id) AS memory_count,
                       (SELECT COUNT(*) FROM chat_messages c WHERE c.avatar_id=a.id) AS msg_count,
@@ -610,6 +610,10 @@ def set_official(avatar_id):
     is_official = 1 if data.get("is_official") else 0
     desc  = (data.get("desc") or "").strip()[:40]
     emoji = (data.get("emoji") or "").strip()[:4]
+    # 回复文体：letter=书信体（详尽分析300字+），chat=微信短消息
+    style = data.get("reply_style")
+    if style not in ("chat", "letter"):
+        style = None
 
     with get_db() as conn:
         av = conn.execute("SELECT id FROM avatars WHERE id=?", (avatar_id,)).fetchone()
@@ -618,6 +622,8 @@ def set_official(avatar_id):
         conn.execute(
             "UPDATE avatars SET is_official=?, official_desc=?, official_emoji=? WHERE id=?",
             (is_official, desc, emoji, avatar_id))
+        if style:
+            conn.execute("UPDATE avatars SET reply_style=? WHERE id=?", (style, avatar_id))
     print(f"[ADMIN] 替身 {avatar_id[:8]} is_official={is_official}")
     return jsonify({"ok": True, "is_official": bool(is_official)})
 
@@ -640,3 +646,20 @@ def official_stats():
                FROM avatars a
                WHERE a.is_official=1 AND a.status='active'""").fetchall())
     return jsonify({"avatars": rows})
+
+
+@admin_bp.post("/avatars/<avatar_id>/reply-style")
+@require_admin
+def set_reply_style(avatar_id):
+    """
+    切换回复文体。
+    Body: {"reply_style": "letter"}  letter=书信体(300字+详尽分析) | chat=微信短消息
+    """
+    style = (request.get_json() or {}).get("reply_style")
+    if style not in ("chat", "letter"):
+        return jsonify({"error": "reply_style 只能是 chat 或 letter"}), 400
+    with get_db() as conn:
+        if not conn.execute("SELECT id FROM avatars WHERE id=?", (avatar_id,)).fetchone():
+            return jsonify({"error": "替身不存在"}), 404
+        conn.execute("UPDATE avatars SET reply_style=? WHERE id=?", (style, avatar_id))
+    return jsonify({"ok": True, "reply_style": style})
