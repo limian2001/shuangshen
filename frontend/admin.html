@@ -697,11 +697,11 @@ async function toggleOfficial(avatarId, isOfficial, name) {
     if (d?.ok) { toast('已取消官方身份'); loadAvatarList(); }
     return;
   }
-  const desc = prompt(`设为官方替身：「${name}」\n\n请输入入口副标题（用户首页显示）：`, '以《解忧杂货铺》的方式，回答你的人生困惑');
+  const desc = prompt(`设为官方替身：「${name}」\n\n请输入入口副标题（用户首页显示）：`, '以《解忧杂货店》的方式，回答你的人生困惑');
   if (desc === null) return;
   const emoji = prompt('请输入入口图标（emoji）：', '🏮');
   if (emoji === null) return;
-  const letter = confirm('使用「书信体」回复吗？\n\n确定 = 书信体（300~800字，详尽分析，适合解忧杂货铺）\n取消 = 微信短消息（一两句话，模拟真人聊天）');
+  const letter = confirm('使用「书信体」回复吗？\n\n确定 = 书信体（300~800字，详尽分析，适合解忧杂货店）\n取消 = 微信短消息（一两句话，模拟真人聊天）');
   const d = await api('POST', `/api/admin/avatars/${avatarId}/official`,
                       { is_official: true, desc, emoji, reply_style: letter ? 'letter' : 'chat' });
   if (d?.ok) { toast('已设为官方替身，用户登录后即可在首页看到入口'); loadAvatarList(); }

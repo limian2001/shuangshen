@@ -30,7 +30,7 @@ Page({
     const user = app.globalData.userInfo || {};
     const userId = user.user_id || '';
     return {
-      title: '解忧杂货铺：把说不出口的事写下来，它会认真给你回信',
+      title: '解忧杂货店：把说不出口的事写下来，它会认真给你回信',
       query: userId ? `ref=${userId}` : '',
     };
   },

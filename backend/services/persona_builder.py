@@ -303,7 +303,7 @@ def build_system_prompt(
     conversation_samples_section = _render_conversation_samples(conversation_samples) if conversation_samples else ""
 
     # 回复文体规则
-    # letter = 书信体（解忧杂货铺类：详尽分析、结构完整）；chat = 微信短消息（模拟真人）
+    # letter = 书信体（解忧杂货店类：详尽分析、结构完整）；chat = 微信短消息（模拟真人）
     if avg_reply_chars >= 2:
         hard_cap = max(avg_reply_chars * 2, 30)
         reply_length_rule = (

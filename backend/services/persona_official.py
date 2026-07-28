@@ -3,7 +3,7 @@ from __future__ import annotations
 官方替身 — 专用 System Prompt 构建（与普通聊天替身完全隔离）
 
 ⚠️ 架构约定（2026-07 确立）：
-   本文件只服务「官方替身」（avatars.is_official=1），例如「解忧杂货铺」。
+   本文件只服务「官方替身」（avatars.is_official=1），例如「解忧杂货店」。
    普通用户替身走 persona_builder.py，两者互不影响：
      - 改这里 → 只影响官方替身
      - 改 persona_builder.py → 只影响用户替身

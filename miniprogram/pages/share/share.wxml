@@ -3,9 +3,10 @@
 
   <view class="hero">
     <view class="icon">🏮</view>
-    <view class="title">解忧杂货铺</view>
+    <view class="title">解忧杂货店</view>
     <view class="desc">
-      把说不出口的事写下来<br>它会认真读完，再给你回信
+      <view>把说不出口的事写下来</view>
+      <view>它会认真读完，再给你回信</view>
     </view>
   </view>
 
